@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>幫四 · Gang of Four</title>
+<style>
+  :root{
+    --lacquer:#7a1620;
+    --lacquer-deep:#4d0d14;
+    --ink:#161311;
+    --paper:#f3e6c9;
+    --gold:#c9a24b;
+    --gold-bright:#e6c878;
+    --jade:#2f6e57;
+    --jade-deep:#1c4a3a;
+    --imperial-yellow:#d6a23c;
+    --red-suit:#b8323b;
+    --yellow-suit:#c79a3a;
+    --green-suit:#3f7d5c;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{height:100%; margin:0; overscroll-behavior:none;}
+  body{
+    font-family:"Songti SC","STSong","Noto Serif SC",serif;
+    background:
+      radial-gradient(circle at 50% 0%, var(--lacquer) 0%, var(--lacquer-deep) 55%, var(--ink) 100%);
+    color:var(--paper);
+    height:100vh;
+    height:100dvh;
+    min-height:100vh;
+    min-height:100dvh;
+    display:flex; flex-direction:column;
+    overflow-y:auto;
+    overflow-x:hidden;
+  }
+  .cloud-pattern{
+    position:fixed; inset:0; pointer-events:none; opacity:0.06; z-index:0;
+    background-image:
+      radial-gradient(circle at 20% 20%, var(--gold) 0 2px, transparent 3px),
+      radial-gradient(circle at 60% 40%, var(--gold) 0 2px, transparent 3px),
+      radial-gradient(circle at 80% 80%, var(--gold) 0 2px, transparent 3px),
+      radial-gradient(circle at 35% 70%, var(--gold) 0 2px, transparent 3px);
+    background-size:140px 140px;
+  }
+
+  /* ---------- HEADER ---------- */
+  #topbar{
+    position:relative; z-index:2;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:10px 14px;
+    border-bottom:1px solid rgba(201,162,75,0.4);
+    background:linear-gradient(180deg, rgba(0,0,0,0.25), transparent);
+  }
+  #topbar .title{
+    font-size:18px; letter-spacing:2px; color:var(--gold-bright);
+    text-shadow:0 1px 2px rgba(0,0,0,0.6);
+    display:flex; align-items:center; gap:8px;
+  }
+  #topbar .seal{
+    width:26px;height:26px;border-radius:4px;background:var(--lacquer);
+    border:1.5px solid var(--gold); color:var(--gold-bright); font-size:13px;
+    display:flex;align-items:center;justify-content:center; transform:rotate(-4deg);
+  }
+  #topbar .score-pill{
+    font-size:12px; color:var(--paper); background:rgba(0,0,0,0.3);
+    border:1px solid rgba(201,162,75,0.5); border-radius:20px; padding:5px 10px;
+  }
+
+  /* ---------- TABLE ---------- */
+  #table{
+    position:relative; z-index:1;
+    flex:1; display:flex; flex-direction:column; justify-content:space-between;
+    padding:6px 8px; gap:4px; min-height:0;
+  }
+
+  .opponent-row{display:flex; justify-content:space-between; padding:0 4px;}
+  .opponent{
+    flex:1; margin:2px; display:flex; flex-direction:column; align-items:center;
+    background:rgba(0,0,0,0.22); border:1px solid rgba(201,162,75,0.25);
+    border-radius:10px; padding:6px 4px; position:relative;
+  }
+  .opponent.active{box-shadow:0 0 0 2px var(--gold-bright), 0 0 14px rgba(230,200,120,0.6);}
+  .opponent .name{font-size:11px; color:var(--gold-bright); white-space:nowrap;}
+  .opponent .hand-count{font-size:10px; color:var(--paper); opacity:0.8;}
+  .opponent .mini-cards{display:flex; margin-top:3px;}
+  .mini-card{
+    width:14px; height:20px; margin-left:-8px; border-radius:2px;
+    background:linear-gradient(135deg, var(--jade), var(--jade-deep));
+    border:1px solid rgba(230,200,120,0.5);
+  }
+  .mini-card:first-child{margin-left:0;}
+  .bubble{
+    position:absolute; top:-8px; right:-4px; background:var(--paper); color:var(--ink);
+    font-size:9px; padding:2px 5px; border-radius:8px; border:1px solid var(--gold);
+    box-shadow:0 1px 3px rgba(0,0,0,0.4); max-width:90px; text-align:center;
+  }
+  .last-card-played{
+    position:absolute; bottom:-26px; left:50%; transform:translateX(-50%);
+    display:flex; gap:2px;
+  }
+
+  #center-area{
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; min-height:90px; position:relative;
+  }
+  #trick-zone{
+    display:flex; gap:4px; align-items:flex-end; min-height:64px; flex-wrap:wrap; justify-content:center;
+    max-width:94vw;
+  }
+  #trick-label{font-size:11px; color:var(--gold); opacity:0.85; letter-spacing:1px;}
+  #direction-indicator{
+    font-size:18px; color:var(--gold-bright); opacity:0.85;
+  }
+
+  /* ---------- PLAYER ---------- */
+  .player-zone{
+    display:flex; flex-direction:column; align-items:center; gap:4px; padding-bottom:4px;
+  }
+  .player-info{
+    display:flex; align-items:center; gap:10px; font-size:12px; color:var(--gold-bright);
+  }
+  #hand{
+    display:flex; justify-content:flex-start; padding:14px 12px 8px;
+    min-height:92px;
+    width:100%; max-width:100%; align-self:stretch;
+    overflow-x:auto; overflow-y:visible;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  #hand::-webkit-scrollbar{ display:none; }
+  #hand-track{
+    display:flex; margin:0 auto;
+  }
+  .card{
+    width:50px; height:74px; border-radius:6px;
+    background:linear-gradient(160deg, var(--paper) 0%, #e9d8ad 100%);
+    border:1.5px solid #3a2a18;
+    margin-left:-15px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    box-shadow:0 2px 5px rgba(0,0,0,0.5);
+    transition:transform 0.15s ease, margin-top 0.15s ease, box-shadow 0.15s ease;
+    position:relative; cursor:pointer;
+    flex-shrink:0;
+    z-index:1;
+  }
+  .card:first-child{margin-left:0;}
+  .card.selected{transform:translateY(-14px); box-shadow:0 0 0 2px var(--gold-bright), 0 6px 10px rgba(0,0,0,0.5); z-index:5;}
+  .card.highlight-received{
+    box-shadow:0 0 0 3px var(--gold-bright), 0 0 14px 3px rgba(230,200,120,0.85);
+    animation:exchange-pulse 1.4s ease-in-out infinite;
+    z-index:4;
+  }
+  @keyframes exchange-pulse{
+    0%,100%{ box-shadow:0 0 0 3px var(--gold-bright), 0 0 8px 2px rgba(230,200,120,0.6); }
+    50%{ box-shadow:0 0 0 3px var(--gold-bright), 0 0 18px 6px rgba(230,200,120,0.95); }
+  }
+  .card .rank{font-size:18px; font-weight:bold;}
+  .card .suit-dot{width:7px;height:7px;border-radius:50%; margin-top:2px;}
+  .card.red .rank, .card.red .label{color:var(--red-suit);}
+  .card.yellow .rank, .card.yellow .label{color:#9c7a1f;}
+  .card.green .rank, .card.green .label{color:var(--green-suit);}
+  .card.special{background:linear-gradient(160deg,#2b1b10,#1a100a); border-color:var(--gold-bright);}
+  .card.special .rank{color:var(--gold-bright); font-size:13px; text-align:center; line-height:1.1;}
+  .card.dragon .rank{color:#e6543f;}
+  .card.rainbow .rank{
+    background:linear-gradient(90deg, var(--red-suit), var(--yellow-suit), var(--green-suit));
+    -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:bold;
+  }
+  .card.small{width:34px; height:50px; margin-left:-16px;}
+  .card.small .rank{font-size:13px;}
+
+  /* ---------- CONTROLS ---------- */
+  #controls{
+    display:flex; justify-content:center; gap:10px; padding:6px 10px 14px;
+  }
+  .btn{
+    font-family:inherit; font-size:14px; letter-spacing:1px;
+    padding:10px 22px; border-radius:24px; border:1.5px solid var(--gold);
+    background:linear-gradient(180deg, var(--lacquer), var(--lacquer-deep));
+    color:var(--gold-bright); box-shadow:0 2px 6px rgba(0,0,0,0.5);
+  }
+  .btn:active{transform:scale(0.96);}
+  .btn:disabled{opacity:0.35;}
+  .btn.primary{background:linear-gradient(180deg, var(--gold-bright), var(--imperial-yellow)); color:var(--ink); border-color:#8a6a20;}
+
+  /* ---------- OVERLAYS ---------- */
+  #overlay{
+    position:fixed; inset:0; background:rgba(10,5,3,0.78); z-index:50;
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  #overlay.show{display:flex;}
+  .panel{
+    background:linear-gradient(160deg, #221712, #150d09);
+    border:1.5px solid var(--gold); border-radius:14px; padding:22px;
+    max-width:380px; width:100%; text-align:center;
+    box-shadow:0 10px 40px rgba(0,0,0,0.7);
+  }
+  .panel h2{color:var(--gold-bright); letter-spacing:2px; margin:0 0 6px;}
+  .panel p{color:var(--paper); font-size:13px; opacity:0.85; margin:4px 0 16px;}
+  .panel table{width:100%; font-size:13px; color:var(--paper); border-collapse:collapse; margin-bottom:14px;}
+  .panel td{padding:5px 4px; border-bottom:1px solid rgba(201,162,75,0.2);}
+  .panel td.namecol{text-align:left; color:var(--gold-bright);}
+  .panel td.num{text-align:right;}
+
+  #toast{
+    position:fixed; top:54px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.75); color:var(--gold-bright); border:1px solid var(--gold);
+    padding:8px 16px; border-radius:20px; font-size:13px; z-index:60; opacity:0; transition:opacity 0.3s;
+    pointer-events:none; max-width:88vw; text-align:center;
+  }
+  #toast.show{opacity:1;}
+
+  .menu-card{
+    width:100%; text-align:left; background:rgba(0,0,0,0.25); border:1px solid rgba(201,162,75,0.4);
+    color:var(--paper); border-radius:10px; padding:12px 14px; margin-bottom:10px; font-size:13px;
+  }
+</style>
+</head>
+<body>
+
+<div class="cloud-pattern"></div>
+
+<div id="topbar">
+  <div class="title"><span class="seal">幫</span> Gang of Four</div>
+  <div style="display:flex; align-items:center; gap:8px;">
+    <div class="score-pill" id="round-indicator">Manche 1</div>
+    <button class="score-pill" id="btn-settings" style="cursor:pointer;">⚙️</button>
+    <button class="score-pill" id="btn-history" style="cursor:pointer;">📜</button>
+    <button class="score-pill" id="btn-info" style="cursor:pointer;">❓</button>
+  </div>
+</div>
+
+<div id="table">
+  <div class="opponent-row">
+    <div class="opponent" id="opp-left">
+      <div class="name">Joueur Ouest</div>
+      <div class="hand-count">16 cartes</div>
+      <div class="mini-cards" id="opp-left-cards"></div>
+    </div>
+    <div class="opponent" id="opp-top">
+      <div class="name">Joueur Nord</div>
+      <div class="hand-count">16 cartes</div>
+      <div class="mini-cards" id="opp-top-cards"></div>
+    </div>
+    <div class="opponent" id="opp-right">
+      <div class="name">Joueur Est</div>
+      <div class="hand-count">16 cartes</div>
+      <div class="mini-cards" id="opp-right-cards"></div>
+    </div>
+  </div>
+
+  <div id="center-area">
+    <div id="direction-indicator">↺</div>
+    <div id="trick-label">Pli en cours</div>
+    <div id="trick-zone"></div>
+  </div>
+
+  <div class="player-zone">
+    <div class="player-info">
+      <span id="player-turn-label">À toi de jouer</span>
+    </div>
+    <div id="hand"><div id="hand-track"></div></div>
+    <div id="controls">
+      <button class="btn" id="btn-pass">Passer</button>
+      <button class="btn primary" id="btn-play">Jouer</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="overlay">
+  <div class="panel" id="panel-content"></div>
+</div>
+
+<script>
+/* =========================================================
+   GANG OF FOUR — moteur de jeu + IA + interface mobile
+   ========================================================= */
+
+const SUITS = ['green','yellow','red']; // ordre croissant
+const SUIT_RANK = {green:0, yellow:1, red:2};
+const SUIT_LABEL = {green:'🟢', yellow:'🟡', red:'🔴'};
+const PLAYER_NAMES_BOTS = ['Joueur Ouest','Joueur Nord','Joueur Est'];
+let userPseudo = localStorage.getItem('g4_pseudo') || '';
+function currentPlayerNames(){
+  return [userPseudo || 'Toi', ...PLAYER_NAMES_BOTS];
+}
+// seats: 0 = bottom(human), 1 = left, 2 = top, 3 = right
+
+let deck = [];
+let players = []; // {name, hand:[], isHuman, seat}
+let direction = 1; // 1 = droite vers gauche (sens de la 1ère manche), -1 = gauche vers droite
+let currentLeader = 0;
+let turnIndex = 0;
+let currentTrick = { combo:null, plays:[] }; // plays: {seat, cards, combo}
+let passesInRow = 0;
+let lastNonPassSeat = null;
+let scores = [0,0,0,0];
+let roundNumber = 1;
+let firstRoundEver = true;
+let mustOpenWithRainbow1 = false;
+let botDifficulty = {1:'medium', 2:'medium', 3:'medium'};
+let playedCardsLog = []; // cartes dans l'ordre de défausse pour la distribution suivante
+let roundDiscardPile = []; // pile de défausse dans l'ordre — servira de deck non mélangé pour la manche suivante
+let dealerSeat = Math.floor(Math.random()*4); // distributeur aléatoire pour la 1ère manche
+let selectedCards = [];
+let gameOver = false;
+let lastTrickWinnerCards = null;
+
+function makeDeck(){
+  let d = [];
+  let id = 0;
+  for(const suit of SUITS){
+    for(let rank=1; rank<=10; rank++){
+      for(let copy=0; copy<2; copy++){
+        if(rank===1 && copy===1 && false){} // placeholder, not used
+        d.push({id:id++, type:'number', rank, suit, power: rank*10 + SUIT_RANK[suit]});
+      }
+    }
+  }
+  d.push({id:id++, type:'rainbow1', rank:1, suit:'rainbow', power: 1*10 + 2}); // même valeur que le 1 rouge
+  d.push({id:id++, type:'phoenix', name:'green', power:110, label:'Phénix vert'});
+  d.push({id:id++, type:'phoenix', name:'yellow', power:111, label:'Phénix jaune'});
+  d.push({id:id++, type:'dragon', power:120, label:'Dragon'});
+  return d;
+}
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+
+function cardLabel(c){
+  if(c.type==='dragon') return 'Dragon';
+  if(c.type==='phoenix') return c.label;
+  if(c.type==='rainbow1') return '1✦';
+  return String(c.rank);
+}
+function cardColorClass(c){
+  if(c.type==='dragon') return 'special dragon';
+  if(c.type==='phoenix') return 'special';
+  if(c.type==='rainbow1') return 'special rainbow';
+  return c.suit;
+}
+function sortHand(hand){
+  return hand.slice().sort((a,b)=>a.power-b.power);
+}
+
+/* ---------- Détection / comparaison de combinaisons ---------- */
+// renvoie {type, power, count, highCard} ou null si invalide
+function evaluateCombo(cards){
+  if(cards.length===0) return null;
+  const n = cards.length;
+  const sorted = cards.slice().sort((a,b)=>a.power-b.power);
+
+  // GANG (4 ou plus du même rang, y compris cartes spéciales identiques)
+  if(n>=4){
+    const rankKey = c => c.type==='number'||c.type==='rainbow1' ? c.rank : c.type;
+    const firstKey = rankKey(sorted[0]);
+    if(sorted.every(c=>rankKey(c)===firstKey)){
+      // power: rang d'abord, puis nombre de cartes
+      const rankVal = firstKey==='rainbow1' ? 1 : (typeof firstKey==='number'?firstKey:99);
+      return {type:'gang', count:n, rankVal, power: rankVal*100+n, highCard: sorted[sorted.length-1]};
+    }
+  }
+  if(n===1){
+    return {type:'single', count:1, power: sorted[0].power, highCard: sorted[0]};
+  }
+  if(n===2){
+    if(sameRank(sorted) ){
+      return {type:'pair', count:2, power: Math.max(sorted[0].power, sorted[1].power), highCard: sorted[1]};
+    }
+    return null;
+  }
+  if(n===3){
+    if(sameRank(sorted)){
+      return {type:'triple', count:3, power: sorted[2].power, highCard: sorted[2]};
+    }
+    return null;
+  }
+  if(n===5){
+    // uniquement cartes numériques (1-10) pour straight/flush/fullhouse/straightflush
+    if(sorted.every(c=>c.type==='number'||c.type==='rainbow1')){
+      const ranks = sorted.map(c=>c.type==='rainbow1'?1:c.rank);
+      // Le 1 multicolore peut être déclaré de n'importe quelle couleur pour former une couleur (flush/straight flush)
+      const numberSuits = sorted.filter(c=>c.type==='number').map(c=>c.suit);
+      const rainbowCount = sorted.filter(c=>c.type==='rainbow1').length;
+      const isFlush = numberSuits.length>0 && numberSuits.every(s=>s===numberSuits[0]) && (numberSuits.length + rainbowCount === 5);
+      const sortedRanks = ranks.slice().sort((a,b)=>a-b);
+      let isStraight = true;
+      for(let i=1;i<5;i++){ if(sortedRanks[i]!==sortedRanks[i-1]+1){ isStraight=false; break; } }
+      // full house: 3+2
+      const counts = {};
+      ranks.forEach(r=>counts[r]=(counts[r]||0)+1);
+      const countVals = Object.values(counts).sort((a,b)=>b-a);
+      const isFullHouse = countVals[0]===3 && countVals[1]===2;
+
+      if(isStraight && isFlush){
+        return {type:'straightflush', count:5, power: 300 + sorted[4].power, highCard: sorted[4]};
+      }
+      if(isFullHouse){
+        // power basé sur le rang du triple
+        const tripleRank = Object.keys(counts).find(k=>counts[k]===3);
+        const tripleCards = sorted.filter(c=>(c.type==='rainbow1'?1:c.rank)==tripleRank);
+        const highest = tripleCards.sort((a,b)=>a.power-b.power)[tripleCards.length-1];
+        return {type:'fullhouse', count:5, power: 200 + highest.power, highCard: highest};
+      }
+      if(isFlush){
+        return {type:'flush', count:5, power: 100 + sorted[4].power, highCard: sorted[4]};
+      }
+      if(isStraight){
+        return {type:'straight', count:5, power: sorted[4].power, highCard: sorted[4]};
+      }
+    }
+    return null;
+  }
+  return null;
+}
+function sameRank(sorted){
+  const key = c => c.type==='number'||c.type==='rainbow1' ? c.rank : c.type;
+  return sorted.every(c=>key(c)===key(sorted[0]));
+}
+
+// peut-on jouer `cards` par-dessus le pli courant ?
+function canBeat(combo, currentCombo){
+  if(!combo) return false;
+  if(!currentCombo) return true; // ouverture de pli
+  if(combo.type==='gang'){
+    if(currentCombo.type!=='gang') return true; // gang bat tout
+    if(combo.count!==currentCombo.count) return combo.count>currentCombo.count;
+    return combo.rankVal>currentCombo.rankVal;
+  }
+  if(currentCombo.type==='gang') return false; // seul un gang plus fort bat un gang
+  if(combo.count!==currentCombo.count) return false;
+  // pour les combinaisons de 5, le type compte dans la hiérarchie : straight < flush < fullhouse < straightflush
+  const order5 = {straight:0, flush:1, fullhouse:2, straightflush:3};
+  if(combo.count===5){
+    if(order5[combo.type]!==order5[currentCombo.type]) return order5[combo.type]>order5[currentCombo.type];
+    return combo.power>currentCombo.power;
+  }
+  return combo.power>currentCombo.power;
+}
+
+/* ---------- Initialisation d'une manche ---------- */
+function dealRound(){
+  // ---- Réinitialisation des variables de manche ----
+  players = currentPlayerNames().map((name,i)=>({name, hand:[], isHuman:i===0, seat:i}));
+  currentTrick = {combo:null, plays:[]};
+  passesInRow = 0;
+  lastNonPassSeat = null;
+  selectedCards = [];
+  lastTrickWinnerCards = null;
+  highlightedExchangeCard = null;
+
+  if(firstRoundEver){
+    // Mélange aléatoire complet
+    deck = shuffle(makeDeck());
+    playedCardsLog = [];
+    roundDiscardPile = [];
+
+    // Distribution : le distributeur donne carte par carte en commençant par le joueur à sa droite
+    // Siège à droite du dealer = (dealerSeat + 3) % 4 (sens droite -> gauche, direction=1)
+    direction = 1;
+    const firstReceiver = (dealerSeat + 3) % 4; // premier à droite du distributeur
+    for(let i=0; i<deck.length; i++){
+      const seat = (firstReceiver + i) % 4;
+      players[seat].hand.push(deck[i]);
+    }
+    players.forEach(p=>p.hand = sortHand(p.hand));
+
+    // Le joueur avec le 1 multicolore commence
+    const starter = players.findIndex(p=>p.hand.some(c=>c.type==='rainbow1'));
+    currentLeader = starter;
+    turnIndex = currentLeader;
+    mustOpenWithRainbow1 = true;
+    updateDirectionIndicator();
+    renderAll();
+    toast(`Manche ${roundNumber} — ${players[turnIndex].isHuman?'tu commences':players[turnIndex].name+' commence'} et doit jouer le 1 multicolore`);
+    maybeBotTurn();
+
+  } else {
+    // ---- Manches suivantes : pas de mélange ----
+    // roundDiscardPile est déjà complet (rempli au fil des défausses + restes collectés dans finishRound)
+
+    // Nouveau sens de jeu
+    direction = direction * -1;
+
+    // Le perdant coupe
+    const loserIsHuman = (lastRoundLoser === 0);
+    if(loserIsHuman){
+      promptCutDeck(roundDiscardPile.slice(), afterCut);
+    } else {
+      const cutAt = 10 + Math.floor(Math.random() * 45);
+      const cut = roundDiscardPile.slice(cutAt).concat(roundDiscardPile.slice(0, cutAt));
+      toast(`${players[lastRoundLoser].name} coupe le tas en ${cutAt}.`, 2000);
+      afterCut(cut);
+    }
+  }
+}
+
+function afterCut(cutDeck){
+  // Distribution par le gagnant, en commençant par le premier joueur dans le sens de la manche suivante
+  const winnerSeat = lastRoundWinner;
+  const firstReceiver = direction===1 ? (winnerSeat + 3) % 4 : (winnerSeat + 1) % 4;
+
+  players = currentPlayerNames().map((name,i)=>({name, hand:[], isHuman:i===0, seat:i}));
+  for(let i=0; i<cutDeck.length; i++){
+    const seat = (firstReceiver + i) % 4;
+    players[seat].hand.push(cutDeck[i]);
+  }
+  players.forEach(p=>p.hand = sortHand(p.hand));
+  playedCardsLog = [];
+  roundDiscardPile = [];
+  highlightedExchangeCard = null;
+
+  // Échange APRÈS distribution
+  updateDirectionIndicator();
+  renderAll();
+  const givenByLoser = doCardExchangeStep1();
+  if(givenByLoser===null){
+    turnIndex = currentLeader;
+    maybeBotTurn();
+    return;
+  }
+  if(players[lastRoundWinner].isHuman){
+    promptHumanExchangeChoice(givenByLoser);
+  } else {
+    const winner = players[lastRoundWinner];
+    winner.hand = sortHand(winner.hand);
+    let givenCard = winner.hand.find(c=>c!==givenByLoser);
+    if(!givenCard) givenCard = winner.hand[0];
+    winner.hand = winner.hand.filter(c=>c!==givenCard);
+    doCardExchangeStep2(givenCard);
+    finishDealStart();
+  }
+}
+
+function promptCutDeck(pile, callback){
+  const panel = document.getElementById('panel-content');
+  const n = pile.length; // 64
+  let cutAt = Math.floor(n/2);
+  panel.innerHTML = `
+    <h2>✂️ Couper le tas</h2>
+    <p>Tu as perdu la manche. Choisis où couper le tas de ${n} cartes.<br>
+    Le paquet du dessous passera par-dessus.</p>
+    <div style="margin:14px 0; text-align:center;">
+      <div style="font-size:28px; font-weight:bold; color:var(--gold-bright);" id="cut-display">${cutAt}</div>
+      <div style="font-size:12px; opacity:0.7; margin-bottom:10px;">cartes en dessous / ${n-cutAt} au-dessus</div>
+      <input type="range" id="cut-slider" min="1" max="${n-1}" value="${cutAt}"
+        style="width:90%; accent-color:var(--gold-bright);">
+    </div>
+    <div style="display:flex; justify-content:center; gap:6px; margin:10px 0;">
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <div style="background:var(--jade); border:1px solid var(--gold); border-radius:4px; width:50px; height:30px; display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--paper);" id="cut-bottom-pile">↓</div>
+        <div style="font-size:10px; color:var(--gold);">Dessous → Dessus</div>
+      </div>
+    </div>
+    <button class="btn primary" id="btn-confirm-cut">Couper ici</button>
+  `;
+  document.getElementById('overlay').classList.add('show');
+  const slider = document.getElementById('cut-slider');
+  const display = document.getElementById('cut-display');
+  slider.addEventListener('input', ()=>{
+    cutAt = parseInt(slider.value,10);
+    display.textContent = cutAt;
+    display.nextElementSibling.textContent = `cartes en dessous / ${n-cutAt} au-dessus`;
+  });
+  document.getElementById('btn-confirm-cut').addEventListener('click', ()=>{
+    const cut = pile.slice(cutAt).concat(pile.slice(0, cutAt));
+    document.getElementById('overlay').classList.remove('show');
+    toast(`Tu coupes en ${cutAt} — le bas passe au-dessus.`, 2500);
+    callback(cut);
+  });
+}
+
+function finishDealStart(){
+  renderAll();
+  turnIndex = currentLeader;
+  renderAll();
+  maybeBotTurn();
+}
+
+function promptHumanExchangeChoice(receivedCard){
+  const panel = document.getElementById('panel-content');
+  const winner = players[lastRoundWinner];
+  const loser = players[lastRoundLoser];
+  panel.innerHTML = `
+    <h2>Échange de cartes</h2>
+    <p>Tu as remporté la manche précédente. Choisis la carte que tu redonnes à ${loser.name} (l'échange sera visible de tous). Tu ne peux pas lui redonner la carte qu'il vient de te céder (${cardLabel(receivedCard)}).</p>
+    <div id="exchange-hand" style="display:flex; flex-wrap:wrap; justify-content:center; gap:6px; margin-bottom:16px;"></div>
+    <button class="btn primary" id="btn-confirm-exchange" disabled>Confirmer</button>
+  `;
+  document.getElementById('overlay').classList.add('show');
+  const handDiv = document.getElementById('exchange-hand');
+  let chosenCard = null;
+  sortHand(winner.hand).forEach(c=>{
+    const el = document.createElement('div');
+    const isBlocked = c===receivedCard;
+    el.className = 'card small ' + cardColorClass(c) + (isBlocked ? '' : '');
+    el.innerHTML = `<div class="rank">${cardLabel(c)}</div>`;
+    if(isBlocked){
+      el.style.opacity = '0.3';
+      el.style.cursor = 'not-allowed';
+    } else {
+      el.addEventListener('click', ()=>{
+        handDiv.querySelectorAll('.card').forEach(x=>x.classList.remove('selected'));
+        el.classList.add('selected');
+        chosenCard = c;
+        document.getElementById('btn-confirm-exchange').disabled = false;
+      });
+    }
+    handDiv.appendChild(el);
+  });
+  document.getElementById('btn-confirm-exchange').onclick = ()=>{
+    if(!chosenCard || chosenCard===receivedCard) return;
+    winner.hand = winner.hand.filter(c=>c!==chosenCard);
+    doCardExchangeStep2(chosenCard);
+    document.getElementById('overlay').classList.remove('show');
+    finishDealStart();
+  };
+}
+
+let lastRoundLoser=null, lastRoundWinner=null;
+// Etape 1 (toujours automatique) : le perdant donne sa meilleure carte au gagnant.
+// Etape 2 : le gagnant choisit librement la carte qu'il redonne au perdant (lui-même s'il est humain, sinon l'IA choisit).
+let highlightedExchangeCard = null;
+
+function doCardExchangeStep1(){
+  if(lastRoundWinner===null||lastRoundLoser===null) return null;
+  const loser = players[lastRoundLoser];
+  const winner = players[lastRoundWinner];
+  if(loser===winner) return null;
+  loser.hand = sortHand(loser.hand);
+  const bestCard = loser.hand.pop();
+  winner.hand.push(bestCard);
+  winner.hand = sortHand(winner.hand);
+  currentLeader = lastRoundWinner;
+  if(lastRoundWinner===0){
+    highlightedExchangeCard = bestCard;
+    toast(`Tu as remporté la manche : ${loser.name} te donne sa meilleure carte, le ${cardLabel(bestCard)} (entourée en doré dans ta main).`, 4500);
+  } else {
+    toast(`${loser.name} donne sa meilleure carte (${cardLabel(bestCard)}) à ${winner.name}.`, 3000);
+  }
+  return bestCard;
+}
+function doCardExchangeStep2(givenCard){
+  const loser = players[lastRoundLoser];
+  loser.hand.push(givenCard);
+  players.forEach(p=>p.hand=sortHand(p.hand));
+  if(lastRoundLoser===0){
+    highlightedExchangeCard = givenCard;
+    toast(`Tu as perdu la manche : ${players[lastRoundWinner].name} te redonne le ${cardLabel(givenCard)} (entourée en doré dans ta main).`, 4500);
+  } else {
+    toast(`${players[lastRoundWinner].name} redonne ${cardLabel(givenCard)} à ${loser.name}. Échange visible de tous.`, 3000);
+  }
+}
+
+function updateDirectionIndicator(){
+  document.getElementById('direction-indicator').textContent = direction===1 ? '↺' : '↻';
+}
+
+/* ---------- Tours ---------- */
+function nextSeat(seat){
+  return (seat + (direction===-1?1:-1) + 4) % 4;
+  // direction -1 (anticlockwise visually) => seat order 0(bottom)->1(left)->2(top)->3(right)
+}
+
+// Règle de défense : si le joueur suivant n'a plus qu'une carte, celui qui joue avant lui
+// est obligé de jouer s'il en a la possibilité (et, sur une carte seule, doit jouer sa plus haute).
+function nextActivePlayerHandSize(seat){
+  let next = seat, attempts=0;
+  do{ next = nextSeat(next); attempts++; } while(players[next].hand.length===0 && attempts<5);
+  return players[next] ? players[next].hand.length : 99;
+}
+function isDefensiveSituation(seat){
+  return nextActivePlayerHandSize(seat)===1;
+}
+// Parmi les coups valides `moves`, calcule ceux autorisés par la règle de défense.
+function applyDefensiveRule(moves, hand, currentCombo){
+  const sorted = sortHand(hand);
+  const highestCard = sorted[sorted.length-1];
+  if(currentCombo===null){
+    // joueur qui ouvre : doit jouer une combinaison de >1 carte, ou sa plus haute carte seule
+    return moves.filter(m=> m.cards.length>1 || (m.cards.length===1 && m.cards[0]===highestCard));
+  }
+  if(currentCombo.type==='single'){
+    // doit jouer sa plus haute carte si elle bat le pli
+    return moves.filter(m=> m.cards.length===1 && m.cards[0]===highestCard);
+  }
+  // sinon : doit simplement jouer si possible, n'importe quel coup valide convient
+  return moves;
+}
+
+function advanceTurn(){
+  let seat = turnIndex;
+  let attempts=0;
+  do{
+    seat = nextSeat(seat);
+    attempts++;
+  } while(players[seat].hand.length===0 && attempts<5);
+  turnIndex = seat;
+}
+
+function playCards(seat, cards){
+  const player = players[seat];
+  const combo = evaluateCombo(cards);
+  player.hand = player.hand.filter(c=>!cards.includes(c));
+  currentTrick.combo = combo;
+  currentTrick.plays.push({seat, cards, combo});
+  passesInRow = 0;
+  lastNonPassSeat = seat;
+  lastTrickWinnerCards = cards;
+  playedCardsLog.push(...cards);
+  roundDiscardPile.push(...cards);
+
+  if(player.hand.length===0){
+    finishPlayerOut(seat);
+  }
+}
+
+let finishOrder = [];
+function finishPlayerOut(seat){
+  if(!finishOrder.includes(seat)) finishOrder.push(seat);
+}
+
+function passTurn(seat){
+  passesInRow++;
+  currentTrick.plays.push({seat, cards:[], pass:true});
+}
+
+function checkTrickEnd(){
+  // si tout le monde sauf le dernier joueur actif a passé
+  const activePlayers = players.filter(p=>p.hand.length>0).length;
+  if(passesInRow >= activePlayers-1 && lastNonPassSeat!==null){
+    // le pli est remporté par lastNonPassSeat
+    return true;
+  }
+  return false;
+}
+
+function endTrick(){
+  const winner = lastNonPassSeat;
+  toast(`${players[winner].name} remporte le pli.`);
+  currentTrick = {combo:null, plays:[]};
+  passesInRow = 0;
+  lastNonPassSeat = null;
+  if(players[winner].hand.length===0){
+    // déjà sorti -> le suivant actif ouvre
+    let seat = winner; let attempts=0;
+    do{ seat = nextSeat(seat); attempts++; } while(players[seat].hand.length===0 && attempts<5);
+    turnIndex = seat;
+  } else {
+    turnIndex = winner;
+  }
+  renderAll();
+}
+
+/* ---------- Fin de manche / scoring ---------- */
+function checkRoundEnd(){
+  return finishOrder.length>=1;
+}
+
+function finishRound(){
+  // Collecter les cartes restantes dans les mains dans la pile de défausse (dans l'ordre des sièges)
+  for(let s=0; s<4; s++){
+    if(players[s] && players[s].hand.length>0){
+      roundDiscardPile.push(...players[s].hand);
+    }
+  }
+
+  let roundScores = [0,0,0,0];
+  players.forEach((p,i)=>{
+    const n = p.hand.length;
+    let pts = 0;
+    if(n===0) pts=0;
+    else if(n<=7) pts = n*1;
+    else if(n<=10) pts = n*2;
+    else if(n<=13) pts = n*3;
+    else if(n<=15) pts = n*4;
+    else pts = 80;
+    roundScores[i] = pts;
+    scores[i]+=pts;
+  });
+  const winnerSeat = finishOrder[0];
+  const stillPlaying = players.map((p,i)=>({seat:i, cards:p.hand.length, bestPower: p.hand.length>0 ? Math.max(...p.hand.map(c=>c.power)) : -1}))
+    .filter(p=>p.cards>0);
+  stillPlaying.sort((a,b)=> b.cards!==a.cards ? b.cards-a.cards : b.bestPower-a.bestPower);
+  const loserSeat = stillPlaying.length>0 ? stillPlaying[0].seat : winnerSeat;
+  lastRoundWinner = winnerSeat;
+  lastRoundLoser = loserSeat;
+
+  showRoundSummary(roundScores, winnerSeat, loserSeat);
+}
+
+function showRoundSummary(roundScores, winnerSeat, loserSeat){
+  const panel = document.getElementById('panel-content');
+  let rows = players.map((p,i)=>`
+    <tr><td class="namecol">${p.name}${i===winnerSeat?' 🏆':''}${i===loserSeat?' (donne sa carte)':''}</td>
+    <td class="num">+${roundScores[i]}</td><td class="num">${scores[i]} pts</td></tr>
+  `).join('');
+  const isGameOver = scores.some(s=>s>=100);
+  if(isGameOver){
+    const finalWinnerName = players[scores.indexOf(Math.min(...scores))].name;
+    saveHistoryEntry({
+      date: Date.now(),
+      rounds: roundNumber,
+      winner: finalWinnerName,
+      players: players.map((p,i)=>({name:p.name, score:scores[i]}))
+    });
+  }
+  panel.innerHTML = `
+    <h2>Fin de la manche ${roundNumber}</h2>
+    <p>${players[winnerSeat].name} s'est débarrassé(e) de toutes ses cartes en premier.</p>
+    <table>
+      <tr><td class="namecol">Joueur</td><td class="num">Manche</td><td class="num">Total</td></tr>
+      ${rows}
+    </table>
+    ${isGameOver ? `<p style="color:var(--gold-bright); font-size:15px;">🎉 ${players[scores.indexOf(Math.min(...scores))].name} remporte la partie !</p>
+      <button class="btn primary" id="btn-newgame">Nouvelle partie</button>`
+      : `<button class="btn primary" id="btn-nextround">Manche suivante</button>`}
+  `;
+  document.getElementById('overlay').classList.add('show');
+  if(isGameOver){
+    document.getElementById('btn-newgame').onclick = ()=>{
+      scores=[0,0,0,0]; roundNumber=1; firstRoundEver=true; finishOrder=[];
+      dealerSeat = Math.floor(Math.random()*4);
+      roundDiscardPile = [];
+      document.getElementById('overlay').classList.remove('show');
+      dealRound();
+    };
+  } else {
+    document.getElementById('btn-nextround').onclick = ()=>{
+      roundNumber++; firstRoundEver=false; finishOrder=[];
+      document.getElementById('overlay').classList.remove('show');
+      dealRound();
+    };
+  }
+}
+
+/* ---------- IA des bots ---------- */
+function findValidMoves(hand, currentCombo){
+  // génère un ensemble de coups jouables raisonnables (pas exhaustif total mais large)
+  const moves = [];
+  const byKey = {};
+  const rankKey = c => c.type==='number'||c.type==='rainbow1' ? c.rank : c.type;
+  hand.forEach(c=>{ const k=rankKey(c); (byKey[k]=byKey[k]||[]).push(c); });
+
+  // singles
+  hand.forEach(c=>{
+    const combo = evaluateCombo([c]);
+    if(canBeat(combo, currentCombo)) moves.push({cards:[c], combo});
+  });
+  // pairs / triples / gangs by rank groups
+  Object.values(byKey).forEach(group=>{
+    const g = group.slice().sort((a,b)=>a.power-b.power);
+    if(g.length>=2){
+      for(let i=0;i+1<g.length;i++){
+        const pair=[g[i],g[i+1]];
+        const combo = evaluateCombo(pair);
+        if(combo && canBeat(combo, currentCombo)) moves.push({cards:pair, combo});
+      }
+    }
+    if(g.length>=3){
+      const triple = g.slice(0,3);
+      const combo = evaluateCombo(triple);
+      if(combo && canBeat(combo, currentCombo)) moves.push({cards:triple, combo});
+    }
+    if(g.length>=4){
+      for(let count=4; count<=g.length; count++){
+        const gang = g.slice(0,count);
+        const combo = evaluateCombo(gang);
+        if(combo && canBeat(combo, currentCombo)) moves.push({cards:gang, combo});
+      }
+    }
+  });
+  // straights / flush / fullhouse / straightflush — recherche limitée (numériques uniquement)
+  const numCards = hand.filter(c=>c.type==='number'||c.type==='rainbow1');
+  // straights: pour chaque fenêtre de rang consécutif 1..10
+  for(let start=1; start<=6; start++){
+    const wantedRanks = [start,start+1,start+2,start+3,start+4];
+    const pool = wantedRanks.map(r=>numCards.filter(c=>(c.type==='rainbow1'?1:c.rank)===r));
+    if(pool.every(arr=>arr.length>0)){
+      // essaye plusieurs combinaisons (juste la première carte de chaque rang, et alternatives basiques)
+      const combo5 = pool.map(arr=>arr[0]);
+      const combo = evaluateCombo(combo5);
+      if(combo && canBeat(combo, currentCombo)) moves.push({cards:combo5, combo});
+    }
+  }
+  // flush: 5 cartes même couleur (le 1 multicolore peut compléter une couleur)
+  const rainbowCard = numCards.find(c=>c.type==='rainbow1');
+  SUITS.forEach(suit=>{
+    const sameSuit = numCards.filter(c=>c.type==='number' && c.suit===suit).sort((a,b)=>a.power-b.power);
+    if(sameSuit.length>=5){
+      const combo5 = sameSuit.slice(sameSuit.length-5);
+      const combo = evaluateCombo(combo5);
+      if(combo && canBeat(combo, currentCombo)) moves.push({cards:combo5, combo});
+    }
+    if(sameSuit.length===4 && rainbowCard){
+      const combo5 = [...sameSuit, rainbowCard];
+      const combo = evaluateCombo(combo5);
+      if(combo && canBeat(combo, currentCombo)) moves.push({cards:combo5, combo});
+    }
+  });
+  // full house: triple + pair quelconque
+  Object.values(byKey).forEach(g3=>{
+    if(g3.length>=3){
+      const triple = g3.slice(0,3);
+      Object.values(byKey).forEach(g2=>{
+        if(g2!==g3 && g2.length>=2){
+          const pair = g2.slice(0,2);
+          const combo5 = triple.concat(pair);
+          const combo = evaluateCombo(combo5);
+          if(combo && canBeat(combo, currentCombo)) moves.push({cards:combo5, combo});
+        }
+      });
+    }
+  });
+  return moves;
+}
+
+function getBotDifficulty(seat){
+  return botDifficulty[seat] || 'medium';
+}
+
+// Score d'un coup pour un bot donné : plus le score est BAS, plus le coup est jugé bon.
+function scoreMoveForBot(move, seat, difficulty, leading){
+  const player = players[seat];
+  let score = move.combo.power; // base : préfère se débarrasser des petites cartes d'abord
+
+  const specialWeight = move.cards.reduce((acc,c)=>{
+    if(c.type==='dragon') return acc + 1;
+    if(c.type==='phoenix') return acc + 1;
+    return acc;
+  },0);
+
+  if(difficulty==='easy'){
+    // joue presque au hasard parmi les coups faibles, garde peu en tête
+    score += specialWeight*150;
+    score += Math.random()*40; // un peu d'aléatoire pour rester imprévisible/imparfait
+  } else if(difficulty==='medium'){
+    // évite de gaspiller Dragon/Phénix trop tôt, préfère vider des groupes entiers (paires/brelans/gangs)
+    score += specialWeight*400;
+    score -= move.cards.length*6; // bonus pour les coups qui posent plusieurs cartes d'un coup
+    if(player.hand.length>8) score += specialWeight*200; // garde encore plus les spéciales en début de manche
+  } else { // hard
+    score += specialWeight*700;
+    score -= move.cards.length*10;
+    if(player.hand.length>8) score += specialWeight*300;
+    // anticipe l'adversaire suivant : s'il a très peu de cartes, privilégie un coup qui reprend la main
+    const nextHandSize = nextActivePlayerHandSize(seat);
+    if(nextHandSize<=2 && !leading) score -= 60;
+    // garde un œil sur les cartes déjà sorties : si tous les exemplaires d'un rang plus fort que le sien sont déjà passés, joue plus agressivement (sait qu'il a la main forte)
+    const sameTypeRemainingElsewhere = countRemainingCopiesOutsideHand(move.cards[0], player);
+    if(sameTypeRemainingElsewhere===0) score -= 15;
+  }
+  return score;
+}
+
+// Estime combien de cartes "équivalentes ou supérieures" au type joué restent potentiellement en jeu ailleurs (heuristique simple de comptage de cartes)
+function countRemainingCopiesOutsideHand(card, player){
+  const totalOfType = makeDeck().filter(c=> c.type===card.type && (c.type!=='number' || c.rank===card.rank)).length;
+  const seenOrHeld = playedCardsLog.filter(c=> c.type===card.type && (c.type!=='number' || c.rank===card.rank)).length
+    + player.hand.filter(c=> c.type===card.type && (c.type!=='number' || c.rank===card.rank)).length;
+  return Math.max(0, totalOfType - seenOrHeld);
+}
+
+function botPlay(seat){
+  const player = players[seat];
+  const currentCombo = currentTrick.combo;
+  const difficulty = getBotDifficulty(seat);
+  let moves = findValidMoves(player.hand, currentCombo);
+  const defensive = isDefensiveSituation(seat);
+  const leading = currentCombo===null;
+
+  if(mustOpenWithRainbow1){
+    // la première manche : le détenteur du 1 multicolore doit l'inclure dans son ouverture
+    moves = moves.filter(m=>m.cards.some(c=>c.type==='rainbow1'));
+    if(moves.length===0){
+      const rainbow = player.hand.find(c=>c.type==='rainbow1');
+      moves = [{cards:[rainbow], combo:evaluateCombo([rainbow])}];
+    }
+  }
+
+  let chosen = null;
+  if(defensive && !mustOpenWithRainbow1){
+    const forced = applyDefensiveRule(moves, player.hand, currentCombo);
+    if(forced.length>0){
+      forced.sort((a,b)=> scoreMoveForBot(a,seat,difficulty,leading) - scoreMoveForBot(b,seat,difficulty,leading));
+      // plus la difficulté est haute, plus le bot saisit l'occasion de reprendre la main plutôt que de passer
+      const voluntaryPassChance = {easy:0.30, medium:0.15, hard:0.04}[difficulty];
+      if(!(player.hand.length>6 && Math.random()<voluntaryPassChance)){
+        chosen = forced[0];
+      }
+    }
+  } else if(moves.length>0){
+    moves.sort((a,b)=> scoreMoveForBot(a,seat,difficulty,leading) - scoreMoveForBot(b,seat,difficulty,leading));
+    // si une option permet de vider la main, on la privilégie toujours
+    const winningMove = moves.find(m=>m.cards.length===player.hand.length);
+    if(winningMove) chosen = winningMove;
+    else {
+      chosen = moves[0];
+      // chance de passer volontairement pour garder des options, modulée par la difficulté
+      const passChance = {easy:0.22, medium:0.13, hard:0.06}[difficulty];
+      if(currentCombo && player.hand.length>5 && Math.random()<passChance && moves.length>1 && !mustOpenWithRainbow1){
+        chosen = null;
+      }
+    }
+  }
+
+  if(chosen){
+    mustOpenWithRainbow1 = false;
+    playCards(seat, chosen.cards);
+    showBubble(seat, chosen.cards.map(cardLabel).join(' '));
+  } else {
+    passTurn(seat);
+    showBubble(seat, 'Passe');
+  }
+  renderAll();
+  proceedAfterMove();
+}
+
+function proceedAfterMove(){
+  if(checkRoundEnd()){
+    finishRound();
+    return;
+  }
+  if(checkTrickEnd()){
+    setTimeout(()=>{ endTrick(); maybeBotTurn(); }, 700);
+    return;
+  }
+  advanceTurn();
+  renderAll();
+  maybeBotTurn();
+}
+
+function maybeBotTurn(){
+  if(gameOver) return;
+  if(players[turnIndex].hand.length===0){
+    advanceTurn();
+  }
+  if(!players[turnIndex].isHuman){
+    setTimeout(()=>botPlay(turnIndex), 800);
+  } else {
+    document.getElementById('player-turn-label').textContent = 'À toi de jouer';
+  }
+}
+
+/* ---------- Interaction humaine ---------- */
+function toggleCardSelect(card, el){
+  const idx = selectedCards.indexOf(card);
+  if(idx>=0){ selectedCards.splice(idx,1); el.classList.remove('selected'); }
+  else { selectedCards.push(card); el.classList.add('selected'); }
+}
+
+document.getElementById('btn-play').addEventListener('click', ()=>{
+  if(turnIndex!==0) return;
+  if(selectedCards.length===0){ toast('Sélectionne au moins une carte.'); return; }
+  const combo = evaluateCombo(selectedCards);
+  if(!combo){
+    const ranks = [...new Set(selectedCards.map(c=> c.type==='number'||c.type==='rainbow1'?c.rank:c.type))];
+    if(selectedCards.length>=4 && ranks.length>1){
+      toast(`Pour un gang il faut uniquement des cartes du même rang. Tu as mélangé : ${ranks.join(', ')}.`);
+    } else {
+      toast('Combinaison non valide (vérifie que les cartes sélectionnées forment bien une paire, un brelan, une suite, une couleur ou un gang).');
+    }
+    return;
+  }
+  if(!canBeat(combo, currentTrick.combo)){ toast('Cette combinaison ne bat pas le pli en cours.'); return; }
+  if(mustOpenWithRainbow1 && !selectedCards.some(c=>c.type==='rainbow1')){
+    toast('Tu dois jouer le 1 multicolore (seul ou dans une combinaison) pour ouvrir la première manche.');
+    return;
+  }
+  mustOpenWithRainbow1 = false;
+  if(isDefensiveSituation(0)){
+    const sorted = sortHand(players[0].hand);
+    const highestCard = sorted[sorted.length-1];
+    if(currentTrick.combo===null){
+      if(selectedCards.length===1 && selectedCards[0]!==highestCard){
+        toast(`Le joueur suivant n'a plus qu'une carte : si tu ouvres avec une seule carte, ce doit être ta plus haute (${cardLabel(highestCard)}).`);
+        return;
+      }
+    } else if(currentTrick.combo.type==='single'){
+      if(!(selectedCards.length===1 && selectedCards[0]===highestCard)){
+        toast(`Le joueur suivant n'a plus qu'une carte : tu dois jouer ta plus haute carte (${cardLabel(highestCard)}).`);
+        return;
+      }
+    }
+  }
+  playCards(0, selectedCards.slice());
+  selectedCards = [];
+  highlightedExchangeCard = null;
+  renderAll();
+  proceedAfterMove();
+});
+
+document.getElementById('btn-pass').addEventListener('click', ()=>{
+  if(turnIndex!==0) return;
+  if(!currentTrick.combo){ toast('Tu ouvres le pli : tu dois jouer.'); return; }
+  passTurn(0);
+  selectedCards = [];
+  highlightedExchangeCard = null;
+  renderAll();
+  proceedAfterMove();
+});
+
+/* ---------- Rendu ---------- */
+function showBubble(seat, text){
+  const map = {1:'opp-left',2:'opp-top',3:'opp-right'};
+  if(!map[seat]) return;
+  const el = document.getElementById(map[seat]);
+  let bubble = el.querySelector('.bubble');
+  if(bubble) bubble.remove();
+  bubble = document.createElement('div');
+  bubble.className='bubble';
+  bubble.textContent = text;
+  el.appendChild(bubble);
+  setTimeout(()=>bubble.remove(), 1600);
+}
+
+function toast(msg, duration){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>t.classList.remove('show'), duration || 2200);
+}
+
+function renderMiniCards(seat, containerId, countId){
+  const n = players[seat].hand.length;
+  document.getElementById(countId).textContent = `${n} carte${n>1?'s':''}`;
+  const cont = document.getElementById(containerId);
+  cont.innerHTML='';
+  const show = Math.min(n,8);
+  for(let i=0;i<show;i++){
+    const d = document.createElement('div');
+    d.className='mini-card';
+    cont.appendChild(d);
+  }
+}
+
+function renderHand(){
+  const cont = document.getElementById('hand-track');
+  cont.innerHTML='';
+  players[0].hand.forEach(c=>{
+    const el = document.createElement('div');
+    el.className = 'card ' + cardColorClass(c);
+    el.innerHTML = `<div class="rank">${cardLabel(c)}</div>` + (c.type==='number'?`<div class="suit-dot" style="background:${suitColor(c.suit)}"></div>`:'');
+    if(selectedCards.includes(c)) el.classList.add('selected');
+    if(c===highlightedExchangeCard) el.classList.add('highlight-received');
+    el.addEventListener('click', ()=>toggleCardSelect(c, el));
+    cont.appendChild(el);
+  });
+}
+function suitColor(suit){
+  return {green:'var(--green-suit)', yellow:'var(--yellow-suit)', red:'var(--red-suit)'}[suit];
+}
+
+function renderTrick(){
+  const zone = document.getElementById('trick-zone');
+  zone.innerHTML='';
+  const lastPlay = [...currentTrick.plays].reverse().find(p=>!p.pass);
+  if(lastPlay){
+    lastPlay.cards.forEach(c=>{
+      const el = document.createElement('div');
+      el.className = 'card small ' + cardColorClass(c);
+      el.innerHTML = `<div class="rank">${cardLabel(c)}</div>`;
+      zone.appendChild(el);
+    });
+    document.getElementById('trick-label').textContent = `${players[lastPlay.seat].name} a joué`;
+  } else {
+    document.getElementById('trick-label').textContent = "Nouveau pli — à toi d'ouvrir";
+  }
+}
+
+function renderTurnHighlight(){
+  ['opp-left','opp-top','opp-right'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  const map = {1:'opp-left',2:'opp-top',3:'opp-right'};
+  if(map[turnIndex]) document.getElementById(map[turnIndex]).classList.add('active');
+  const label = document.getElementById('player-turn-label');
+  label.textContent = turnIndex===0 ? 'À toi de jouer' : `Tour de ${players[turnIndex].name}`;
+  document.getElementById('btn-play').disabled = turnIndex!==0;
+  document.getElementById('btn-pass').disabled = turnIndex!==0 || !currentTrick.combo;
+}
+
+function renderAll(){
+  document.querySelector('#opp-left .hand-count').textContent = `${players[1].hand.length} cartes`;
+  document.querySelector('#opp-top .hand-count').textContent = `${players[2].hand.length} cartes`;
+  document.querySelector('#opp-right .hand-count').textContent = `${players[3].hand.length} cartes`;
+  renderMini(1,'opp-left-cards');
+  renderMini(2,'opp-top-cards');
+  renderMini(3,'opp-right-cards');
+  renderHand();
+  renderTrick();
+  renderTurnHighlight();
+  document.getElementById('round-indicator').textContent = `Manche ${roundNumber} · ` + players.map((p,i)=>`${scoreShort(p.name)}:${scores[i]}`).join(' ');
+}
+function scoreShort(name){
+  return name.startsWith('Joueur ')?name.replace('Joueur ',''):name;
+}
+function renderMini(seat, containerId){
+  const n = players[seat].hand.length;
+  const cont = document.getElementById(containerId);
+  cont.innerHTML='';
+  const show = Math.min(n,8);
+  for(let i=0;i<show;i++){
+    const d = document.createElement('div');
+    d.className='mini-card';
+    cont.appendChild(d);
+  }
+}
+
+/* ---------- Réglages : difficulté des bots ---------- */
+document.getElementById('btn-settings').addEventListener('click', ()=>{
+  const panel = document.getElementById('panel-content');
+  const levels = [['easy','Facile'],['medium','Moyen'],['hard','Difficile']];
+  const rows = [1,2,3].map(seat=>`
+    <div style="margin-bottom:14px; text-align:left;">
+      <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">${players[seat].name}</div>
+      <div style="display:flex; gap:6px;" data-seat="${seat}">
+        ${levels.map(([key,label])=>`<button class="btn diff-btn" data-seat="${seat}" data-key="${key}" style="flex:1; padding:8px 4px; font-size:12px; ${botDifficulty[seat]===key?'background:linear-gradient(180deg, var(--gold-bright), var(--imperial-yellow)); color:var(--ink); border-color:#8a6a20;':''}">${label}</button>`).join('')}
+      </div>
+    </div>
+  `).join('');
+  panel.innerHTML = `
+    <h2>Réglages</h2>
+    <div style="text-align:left; margin-bottom:16px;">
+      <div style="color:var(--gold-bright); font-size:13px; margin-bottom:6px;">Ton pseudo</div>
+      <input id="pseudo-edit" type="text" maxlength="16" value="${players[0].name}"
+        style="width:100%; padding:9px; border-radius:8px; border:1.5px solid var(--gold); background:rgba(0,0,0,0.3); color:var(--paper); font-family:inherit; font-size:14px; text-align:center;">
+    </div>
+    <p>Difficulté des bots — s'applique dès le prochain coup.</p>
+    ${rows}
+    <button class="btn primary" id="btn-close-settings">Enregistrer et fermer</button>
+    <button class="btn" id="btn-newgame-settings" style="width:100%; margin-top:8px; color:var(--gold-bright);">🔄 Nouvelle partie</button>
+  `;
+  document.getElementById('overlay').classList.add('show');
+  panel.querySelectorAll('.diff-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const seat = parseInt(btn.dataset.seat,10);
+      botDifficulty[seat] = btn.dataset.key;
+      panel.querySelectorAll(`.diff-btn[data-seat="${seat}"]`).forEach(b=>{
+        b.style.background='';
+        b.style.color='';
+        b.style.borderColor='';
+      });
+      btn.style.background = 'linear-gradient(180deg, var(--gold-bright), var(--imperial-yellow))';
+      btn.style.color = 'var(--ink)';
+      btn.style.borderColor = '#8a6a20';
+    });
+  });
+  document.getElementById('btn-newgame-settings').addEventListener('click', ()=>{
+    const newPseudo = document.getElementById('pseudo-edit').value.trim();
+    if(newPseudo){ userPseudo = newPseudo; localStorage.setItem('g4_pseudo', userPseudo); }
+    document.getElementById('overlay').classList.remove('show');
+    scores=[0,0,0,0]; roundNumber=1; firstRoundEver=true; finishOrder=[];
+    dealerSeat = Math.floor(Math.random()*4);
+    roundDiscardPile = [];
+    dealRound();
+  });
+  document.getElementById('btn-close-settings').addEventListener('click', ()=>{
+    const newPseudo = document.getElementById('pseudo-edit').value.trim();
+    if(newPseudo){
+      userPseudo = newPseudo;
+      localStorage.setItem('g4_pseudo', userPseudo);
+      players[0].name = newPseudo;
+      renderAll();
+    }
+    document.getElementById('overlay').classList.remove('show');
+  });
+});
+
+/* ---------- Pseudo joueur ---------- */
+function promptPseudoThenStart(){
+  const panel = document.getElementById('panel-content');
+  panel.innerHTML = `
+    <h2>Bienvenue</h2>
+    <p>Choisis le pseudo qui apparaîtra à la table de jeu.</p>
+    <input id="pseudo-input" type="text" maxlength="16" placeholder="Ton pseudo"
+      style="width:100%; padding:10px; border-radius:8px; border:1.5px solid var(--gold); background:rgba(0,0,0,0.3); color:var(--paper); font-family:inherit; font-size:15px; text-align:center; margin-bottom:14px;"
+      value="${userPseudo || ''}">
+    <button class="btn primary" id="btn-confirm-pseudo">Jouer</button>
+  `;
+  document.getElementById('overlay').classList.add('show');
+  const input = document.getElementById('pseudo-input');
+  input.focus();
+  const confirm = ()=>{
+    const v = input.value.trim();
+    userPseudo = v || 'Toi';
+    localStorage.setItem('g4_pseudo', userPseudo);
+    document.getElementById('overlay').classList.remove('show');
+    dealRound();
+  };
+  document.getElementById('btn-confirm-pseudo').addEventListener('click', confirm);
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter') confirm(); });
+}
+
+/* ---------- Historique des parties ---------- */
+function getHistory(){
+  try{ return JSON.parse(localStorage.getItem('g4_history') || '[]'); }
+  catch(e){ return []; }
+}
+function saveHistoryEntry(entry){
+  const hist = getHistory();
+  hist.unshift(entry); // plus récent en premier
+  if(hist.length>50) hist.length = 50;
+  localStorage.setItem('g4_history', JSON.stringify(hist));
+}
+
+document.getElementById('btn-info').addEventListener('click', ()=>{
+  const panel = document.getElementById('panel-content');
+  panel.innerHTML = `
+    <h2>📖 Règles du jeu</h2>
+    <div style="max-height:65vh; overflow-y:auto; text-align:left; font-size:13px; line-height:1.6; color:var(--paper);">
+
+      <div style="color:var(--gold-bright); font-size:14px; margin:10px 0 4px;">🃏 Le jeu</div>
+      <p>64 cartes, 4 joueurs, 16 cartes chacun. Le but : se débarrasser de toutes ses cartes le premier. Le dernier avec des cartes en main marque des points — le premier à dépasser <b>100 points perd</b>. Le vainqueur est celui avec le <b>moins de points</b>.</p>
+
+      <div style="color:var(--gold-bright); font-size:14px; margin:10px 0 4px;">🎴 Les cartes</div>
+      <p>Valeurs <b>1 à 10</b> en trois couleurs : 🟢 Vert &lt; 🟡 Jaune &lt; 🔴 Rouge (à rang égal, le rouge l'emporte).<br>
+      Cartes spéciales : <b>1✦ Multicolore</b> (vaut un 1 rouge, joker de couleur dans les combinaisons), <b>Phénix vert &amp; jaune</b>, <b>Dragon</b> (la carte la plus forte du jeu).</p>
+
+      <div style="color:var(--gold-bright); font-size:14px; margin:10px 0 4px;">🀄 Combinaisons jouables</div>
+
+      <div style="border:1px solid rgba(201,162,75,0.3); border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+        <b style="color:var(--gold-bright);">Carte seule</b><br>
+        N'importe quelle carte. Doit être plus forte que la carte précédente.
+        <div style="opacity:0.7; font-size:11px;">Ex : 5🔴 bat 5🟡 qui bat 5🟢</div>
+      </div>
+
+      <div style="border:1px solid rgba(201,162,75,0.3); border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+        <b style="color:var(--gold-bright);">Paire</b><br>
+        2 cartes du même rang. La paire la plus haute gagne.
+        <div style="opacity:0.7; font-size:11px;">Ex : 7🔴+7🟡 bat 7🟢+7🟡</div>
+      </div>
+
+      <div style="border:1px solid rgba(201,162,75,0.3); border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+        <b style="color:var(--gold-bright);">Brelan</b><br>
+        3 cartes du même rang.
+        <div style="opacity:0.7; font-size:11px;">Ex : 4🔴+4🟡+4🟢</div>
+      </div>
+
+      <div style="color:var(--gold-bright); font-size:13px; margin:8px 0 4px;">— Combinaisons de 5 cartes —</div>
+      <div style="opacity:0.7; font-size:11px; margin-bottom:6px;">Hiérarchie croissante : Suite &lt; Couleur &lt; Full &lt; Suite Couleur</div>
+
+      <div style="border:1px solid rgba(201,162,75,0.3); border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+        <b style="color:var(--gold-bright);">Suite</b><br>
+        5 cartes de rangs consécutifs (couleurs libres).
+        <div style="opacity:0.7; font-size:11px;">Ex : 3-4-5-6-7 (n'importe quelle couleur)</div>
+      </div>
+
+      <div style="border:1px solid rgba(201,162,75,0.3); border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+        <b style="color:var(--gold-bright);">Couleur (Flush)</b><br>
+        5 cartes de même couleur. Le 1✦ compte comme n'importe quelle couleur.
+        <div style="opacity:0.7; font-size:11px;">Ex : 2🔴+5🔴+7🔴+8🔴+1✦ (le 1✦ joue rouge)</div>
+      </div>
+
+      <div style="border:1px solid rgba(201,162,75,0.3); border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+        <b style="color:var(--gold-bright);">Full House</b><br>
+        Un brelan + une paire.
+        <div style="opacity:0.7; font-size:11px;">Ex : 6+6+6 + 9+9</div>
+      </div>
+
+      <div style="border:1px solid rgba(201,162,75,0.3); border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+        <b style="color:var(--gold-bright);">Suite Couleur</b><br>
+        5 cartes consécutives de même couleur. Combinaison la plus puissante à 5 cartes.
+        <div style="opacity:0.7; font-size:11px;">Ex : 4🟢+5🟢+6🟢+7🟢+8🟢</div>
+      </div>
+
+      <div style="border:1px solid rgba(201,162,75,0.3); border-radius:8px; padding:8px 10px; margin-bottom:8px; background:rgba(201,162,75,0.08);">
+        <b style="color:var(--gold-bright);">🔥 Gang of Four</b><br>
+        4 cartes ou plus du même rang. Bat <b>n'importe quelle</b> autre combinaison, même un Dragon seul ! Plus il y a de cartes dans le gang, plus il est fort.
+        <div style="opacity:0.7; font-size:11px;">Ex : 4 cartes "8" = Gang. 5 cartes "8" = Gang encore plus fort.</div>
+      </div>
+
+      <div style="color:var(--gold-bright); font-size:14px; margin:10px 0 4px;">⚙️ Déroulement d'un tour</div>
+      <p>Le joueur qui ouvre un pli pose la combinaison de son choix. Chaque joueur suivant doit <b>surenchérir avec la même combinaison plus forte</b>, ou <b>passer</b>. Quand tout le monde a passé, le dernier à avoir joué remporte le pli et ouvre le suivant.</p>
+
+      <div style="color:var(--gold-bright); font-size:14px; margin:10px 0 4px;">⚠️ Règle défensive</div>
+      <p>Si le joueur suivant n'a plus qu'<b>une seule carte</b>, tu es libre de passer — mais si tu choisis de jouer une carte seule, tu <b>dois jouer ta plus haute carte</b>.</p>
+
+      <div style="color:var(--gold-bright); font-size:14px; margin:10px 0 4px;">🔄 Échange entre manches</div>
+      <p>Le <b>vainqueur</b> reçoit la meilleure carte du <b>perdant</b> (celui avec le plus de cartes restantes). En échange, il lui redonne librement une carte de son choix — sauf celle qu'il vient juste de recevoir.</p>
+
+    </div>
+    <button class="btn primary" id="btn-close-info" style="margin-top:14px; width:100%;">Fermer</button>
+  `;
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('btn-close-info').addEventListener('click', ()=>{
+    document.getElementById('overlay').classList.remove('show');
+  });
+});
+
+document.getElementById('btn-history').addEventListener('click', ()=>{
+  const panel = document.getElementById('panel-content');
+  const hist = getHistory();
+  let body;
+  if(hist.length===0){
+    body = `<p>Aucune partie terminée pour l'instant.</p>`;
+  } else {
+    body = hist.map(h=>{
+      const date = new Date(h.date);
+      const dateStr = date.toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'2-digit'}) + ' ' + date.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+      const rows = h.players.map(p=>`
+        <tr><td class="namecol">${p.name}${p.name===h.winner?' 🏆':''}</td><td class="num">${p.score} pts</td></tr>
+      `).join('');
+      return `
+        <div style="border:1px solid rgba(201,162,75,0.3); border-radius:10px; padding:10px; margin-bottom:10px; text-align:left;">
+          <div style="font-size:11px; color:var(--gold); opacity:0.8; margin-bottom:6px;">${dateStr} · ${h.rounds} manche${h.rounds>1?'s':''}</div>
+          <table style="width:100%; font-size:13px;">${rows}</table>
+        </div>`;
+    }).join('');
+  }
+  panel.innerHTML = `
+    <h2>Historique</h2>
+    <div style="max-height:55vh; overflow-y:auto;">${body}</div>
+    <div style="display:flex; gap:8px; margin-top:14px;">
+      ${hist.length>0 ? `<button class="btn" id="btn-clear-history" style="flex:1;">Effacer</button>` : ''}
+      <button class="btn primary" id="btn-close-history" style="flex:1;">Fermer</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('show');
+  const clearBtn = document.getElementById('btn-clear-history');
+  if(clearBtn) clearBtn.addEventListener('click', ()=>{
+    localStorage.removeItem('g4_history');
+    document.getElementById('overlay').classList.remove('show');
+  });
+  document.getElementById('btn-close-history').addEventListener('click', ()=>{
+    document.getElementById('overlay').classList.remove('show');
+  });
+});
+
+/* ---------- Démarrage ---------- */
+promptPseudoThenStart();
+</script>
+</body>
+</html>
