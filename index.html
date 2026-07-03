@@ -1675,19 +1675,30 @@ document.getElementById('btn-create-room').addEventListener('click', async ()=>{
   const pseudo = document.getElementById('pseudo-multi').value.trim() || 'Joueur';
   userPseudo = pseudo;
   localStorage.setItem('g4_pseudo', pseudo);
-  const code = generateCode();
-  const {data, error} = await sb.from('rooms').insert({
-    code,
-    host_local_id: localPlayerId,
-    status: 'waiting'
-  }).select().single();
-  if(error){ alert('Erreur création table : '+error.message); return; }
-  currentRoomId = data.id;
-  currentRoomCode = code;
-  mySeat = 0; isHost = true;
-  await joinSeat(data.id, 0, pseudo);
-  hideLobby();
-  showRoomScreen(data);
+  const btn = document.getElementById('btn-create-room');
+  btn.disabled = true; btn.textContent = '⏳ Création…';
+  try {
+    const code = generateCode();
+    console.log('Tentative création room, code:', code);
+    const {data, error} = await sb.from('rooms').insert({
+      code,
+      host_local_id: localPlayerId,
+      status: 'waiting'
+    }).select().single();
+    console.log('Résultat:', data, error);
+    if(error) throw error;
+    currentRoomId = data.id;
+    currentRoomCode = code;
+    mySeat = 0; isHost = true;
+    await joinSeat(data.id, 0, pseudo);
+    hideLobby();
+    showRoomScreen(data);
+  } catch(e) {
+    alert('Erreur : ' + (e.message || JSON.stringify(e)));
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Créer une table';
+  }
 });
 
 // Rejoindre
