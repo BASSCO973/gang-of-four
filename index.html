@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>幫四 · Gang of Four</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --lacquer:#7a1620;
@@ -215,11 +216,175 @@
     width:100%; text-align:left; background:rgba(0,0,0,0.25); border:1px solid rgba(201,162,75,0.4);
     color:var(--paper); border-radius:10px; padding:12px 14px; margin-bottom:10px; font-size:13px;
   }
+
+  /* --- LOBBY / MULTIJOUEUR --- */
+  #lobby-screen{
+    position:fixed; inset:0; z-index:100; display:none; flex-direction:column;
+    background:radial-gradient(circle at 50% 0%, var(--lacquer) 0%, var(--lacquer-deep) 55%, var(--ink) 100%);
+    align-items:center; justify-content:center; padding:20px;
+  }
+  #lobby-screen.show{ display:flex; }
+  .lobby-panel{
+    background:linear-gradient(160deg,#221712,#150d09); border:1.5px solid var(--gold);
+    border-radius:14px; padding:22px; max-width:400px; width:100%;
+    box-shadow:0 10px 40px rgba(0,0,0,0.7);
+  }
+  .lobby-panel h2{ color:var(--gold-bright); letter-spacing:2px; margin:0 0 6px; text-align:center; }
+  .lobby-panel p{ color:var(--paper); font-size:13px; opacity:0.85; text-align:center; margin:4px 0 14px; }
+  .tab-bar{ display:flex; gap:6px; margin-bottom:16px; }
+  .tab-btn{
+    flex:1; font-family:inherit; font-size:13px; padding:8px; border-radius:8px;
+    border:1px solid rgba(201,162,75,0.4); background:rgba(0,0,0,0.3); color:var(--paper); cursor:pointer;
+  }
+  .tab-btn.active{ background:linear-gradient(180deg,var(--gold-bright),var(--imperial-yellow)); color:var(--ink); border-color:#8a6a20; }
+  .lobby-input{
+    width:100%; padding:10px; border-radius:8px; border:1.5px solid var(--gold);
+    background:rgba(0,0,0,0.3); color:var(--paper); font-family:inherit; font-size:15px;
+    text-align:center; margin-bottom:10px;
+  }
+  .lobby-input::placeholder{ color:rgba(243,230,201,0.4); }
+
+  /* Table visuelle */
+  .table-visual{
+    position:relative; width:100%; aspect-ratio:1; max-width:300px; margin:10px auto;
+  }
+  .table-felt{
+    position:absolute; inset:20%; border-radius:50%;
+    background:radial-gradient(circle, var(--jade) 0%, var(--jade-deep) 100%);
+    border:2px solid var(--gold); display:flex; align-items:center; justify-content:center;
+  }
+  .table-code{ color:var(--gold-bright); font-size:16px; font-weight:bold; letter-spacing:3px; }
+  .seat{
+    position:absolute; width:70px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+  }
+  .seat-north{ top:0; left:50%; transform:translateX(-50%); }
+  .seat-south{ bottom:0; left:50%; transform:translateX(-50%); }
+  .seat-west{ left:0; top:50%; transform:translateY(-50%); }
+  .seat-east{ right:0; top:50%; transform:translateY(-50%); }
+  .seat-avatar{
+    width:46px; height:46px; border-radius:50%; border:2px solid rgba(201,162,75,0.5);
+    background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center;
+    font-size:18px; transition:all 0.2s;
+  }
+  .seat-avatar.taken{ border-color:var(--gold-bright); background:rgba(201,162,75,0.15); }
+  .seat-avatar.mine{ border-color:var(--gold-bright); background:rgba(201,162,75,0.25); box-shadow:0 0 10px rgba(230,200,120,0.6); }
+  .seat-avatar.bot{ border-color:var(--jade); background:rgba(47,110,87,0.2); }
+  .seat-name{ font-size:10px; color:var(--paper); text-align:center; max-width:70px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .seat-label{ font-size:9px; color:var(--gold); opacity:0.7; }
+
+  .ready-dot{ width:8px; height:8px; border-radius:50%; background:var(--jade); display:inline-block; margin-right:4px; }
+  .waiting-dot{ width:8px; height:8px; border-radius:50%; background:var(--gold); display:inline-block; margin-right:4px; }
+
+  /* Minuteur */
+  #turn-timer{
+    position:absolute; top:60px; right:14px; width:36px; height:36px;
+    border-radius:50%; border:2px solid var(--gold); background:rgba(0,0,0,0.5);
+    display:none; align-items:center; justify-content:center;
+    font-size:13px; font-weight:bold; color:var(--gold-bright); z-index:10;
+  }
+  #turn-timer.urgent{ border-color:#e04040; color:#e04040; }
+  #turn-timer.show{ display:flex; }
+
+  /* Classement */
+  .rank-row{ display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid rgba(201,162,75,0.15); }
+  .rank-pos{ width:24px; text-align:center; color:var(--gold); font-weight:bold; font-size:13px; }
+  .rank-name{ flex:1; color:var(--paper); font-size:13px; }
+  .rank-stat{ font-size:12px; color:var(--gold-bright); text-align:right; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body>
 
 <div class="cloud-pattern"></div>
+
+<!-- LOBBY MULTIJOUEUR -->
+<div id="lobby-screen">
+  <div class="lobby-panel">
+    <h2>幫 Gang of Four</h2>
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-solo">🤖 Solo</button>
+      <button class="tab-btn" id="tab-multi">👥 Multijoueur</button>
+      <button class="tab-btn" id="tab-rank">🏆 Classement</button>
+    </div>
+
+    <!-- ONGLET SOLO -->
+    <div id="pane-solo">
+      <p>Joue contre 3 bots</p>
+      <input class="lobby-input" id="pseudo-lobby" type="text" maxlength="16" placeholder="Ton pseudo">
+      <button class="btn primary" id="btn-start-solo" style="width:100%;">Jouer en solo</button>
+    </div>
+
+    <!-- ONGLET MULTIJOUEUR -->
+    <div id="pane-multi" style="display:none;">
+      <input class="lobby-input" id="pseudo-multi" type="text" maxlength="16" placeholder="Ton pseudo">
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <button class="btn primary" id="btn-create-room" style="flex:1;">Créer une table</button>
+        <button class="btn" id="btn-join-room" style="flex:1;">Rejoindre</button>
+      </div>
+      <div id="join-code-wrap" style="display:none;">
+        <input class="lobby-input" id="join-code-input" type="text" maxlength="4" placeholder="Code à 4 lettres" style="letter-spacing:6px; text-transform:uppercase;">
+        <button class="btn primary" id="btn-confirm-join" style="width:100%;">Rejoindre la table</button>
+      </div>
+    </div>
+
+    <!-- ONGLET CLASSEMENT -->
+    <div id="pane-rank" style="display:none;">
+      <div id="rank-list" style="max-height:50vh; overflow-y:auto;">
+        <p style="text-align:center; opacity:0.6;">Chargement…</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TABLE DE JEU (lobby de salle) -->
+<div id="room-screen" style="position:fixed; inset:0; z-index:99; display:none; flex-direction:column; background:radial-gradient(circle at 50% 0%, var(--lacquer) 0%, var(--lacquer-deep) 55%, var(--ink) 100%); align-items:center; justify-content:center; padding:20px;">
+  <div class="lobby-panel" style="max-width:380px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+      <h2 style="margin:0;">Table</h2>
+      <span id="room-code-display" style="color:var(--gold-bright); font-size:22px; letter-spacing:4px; font-weight:bold;"></span>
+    </div>
+    <p id="room-status-msg">En attente des joueurs…</p>
+    <div class="table-visual">
+      <div class="table-felt"><div class="table-code" id="room-code-felt"></div></div>
+      <div class="seat seat-north" id="seat-2">
+        <div class="seat-avatar" id="seat-2-avatar">🪑</div>
+        <div class="seat-name" id="seat-2-name">Libre</div>
+        <div class="seat-label">Nord</div>
+      </div>
+      <div class="seat seat-west" id="seat-1">
+        <div class="seat-avatar" id="seat-1-avatar">🪑</div>
+        <div class="seat-name" id="seat-1-name">Libre</div>
+        <div class="seat-label">Ouest</div>
+      </div>
+      <div class="seat seat-east" id="seat-3">
+        <div class="seat-avatar" id="seat-3-avatar">🪑</div>
+        <div class="seat-name" id="seat-3-name">Libre</div>
+        <div class="seat-label">Est</div>
+      </div>
+      <div class="seat seat-south" id="seat-0">
+        <div class="seat-avatar" id="seat-0-avatar">🪑</div>
+        <div class="seat-name" id="seat-0-name">Libre</div>
+        <div class="seat-label">Sud</div>
+      </div>
+    </div>
+    <div id="room-options" style="display:none; margin:10px 0; font-size:12px; color:var(--paper);">
+      <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <input type="checkbox" id="opt-bots" checked> Remplacer absents par des bots
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <input type="checkbox" id="opt-timeout" checked> Timeout 60s par tour
+      </label>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn" id="btn-leave-room" style="flex:1;">Quitter</button>
+      <button class="btn primary" id="btn-launch-game" style="flex:1; display:none;">Lancer ▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- MINUTEUR DE TOUR -->
+<div id="turn-timer">60</div>
 
 <div id="topbar">
   <div class="title"><span class="seal">幫</span> Gang of Four</div>
@@ -1091,9 +1256,12 @@ document.getElementById('btn-play').addEventListener('click', ()=>{
       }
     }
   }
-  playCards(0, selectedCards.slice());
+  const cardsToPlay = selectedCards.slice();
+  playCards(0, cardsToPlay);
   selectedCards = [];
   highlightedExchangeCard = null;
+  if(isMultiplayer) sendMove('play', cardsToPlay);
+  stopTurnTimer();
   renderAll();
   proceedAfterMove();
 });
@@ -1104,6 +1272,8 @@ document.getElementById('btn-pass').addEventListener('click', ()=>{
   passTurn(0);
   selectedCards = [];
   highlightedExchangeCard = null;
+  if(isMultiplayer) sendMove('pass', []);
+  stopTurnTimer();
   renderAll();
   proceedAfterMove();
 });
@@ -1434,8 +1604,427 @@ document.getElementById('btn-history').addEventListener('click', ()=>{
   });
 });
 
-/* ---------- Démarrage ---------- */
-promptPseudoThenStart();
+/* =========================================================
+   SUPABASE — MULTIJOUEUR
+   ========================================================= */
+const SUPABASE_URL = 'https://pqlcnxzgyfujigjtzkvu.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_faYk9e2SRQot-a-pTQN7Mg_eZIxTa4z';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ID unique persistant du joueur sur cet appareil
+let localPlayerId = localStorage.getItem('g4_player_id');
+if(!localPlayerId){
+  localPlayerId = 'p_' + Math.random().toString(36).slice(2,10);
+  localStorage.setItem('g4_player_id', localPlayerId);
+}
+
+let isMultiplayer = false;
+let currentRoomId = null;
+let currentRoomCode = null;
+let mySeat = null;
+let isHost = false;
+let roomChannel = null;
+let turnTimer = null;
+let turnTimerSec = 60;
+let optBots = true;
+let optTimeout = true;
+
+/* ---- Génération d'un code de 4 lettres ---- */
+function generateCode(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  return Array.from({length:4}, ()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+}
+
+/* ---- LOBBY UI ---- */
+function showLobby(){
+  document.getElementById('lobby-screen').classList.add('show');
+  const saved = localStorage.getItem('g4_pseudo') || '';
+  document.getElementById('pseudo-lobby').value = saved;
+  document.getElementById('pseudo-multi').value = saved;
+}
+function hideLobby(){
+  document.getElementById('lobby-screen').classList.remove('show');
+}
+
+// Tabs
+['solo','multi','rank'].forEach(tab=>{
+  document.getElementById('tab-'+tab).addEventListener('click', ()=>{
+    ['solo','multi','rank'].forEach(t=>{
+      document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+      document.getElementById('pane-'+t).style.display = t===tab?'':'none';
+    });
+    if(tab==='rank') loadRanking();
+  });
+});
+
+// Solo
+document.getElementById('btn-start-solo').addEventListener('click', ()=>{
+  const pseudo = document.getElementById('pseudo-lobby').value.trim() || 'Toi';
+  userPseudo = pseudo;
+  localStorage.setItem('g4_pseudo', pseudo);
+  isMultiplayer = false;
+  hideLobby();
+  scores=[0,0,0,0]; roundNumber=1; firstRoundEver=true; finishOrder=[];
+  dealerSeat = Math.floor(Math.random()*4);
+  roundDiscardPile = [];
+  dealRound();
+});
+
+// Créer une salle
+document.getElementById('btn-create-room').addEventListener('click', async ()=>{
+  const pseudo = document.getElementById('pseudo-multi').value.trim() || 'Joueur';
+  userPseudo = pseudo;
+  localStorage.setItem('g4_pseudo', pseudo);
+  const code = generateCode();
+  const {data, error} = await sb.from('rooms').insert({
+    code,
+    host_local_id: localPlayerId,
+    status: 'waiting'
+  }).select().single();
+  if(error){ alert('Erreur création table : '+error.message); return; }
+  currentRoomId = data.id;
+  currentRoomCode = code;
+  mySeat = 0; isHost = true;
+  await joinSeat(data.id, 0, pseudo);
+  hideLobby();
+  showRoomScreen(data);
+});
+
+// Rejoindre
+document.getElementById('btn-join-room').addEventListener('click', ()=>{
+  document.getElementById('join-code-wrap').style.display = '';
+  document.getElementById('join-code-input').focus();
+});
+document.getElementById('btn-confirm-join').addEventListener('click', async ()=>{
+  const pseudo = document.getElementById('pseudo-multi').value.trim() || 'Joueur';
+  userPseudo = pseudo;
+  localStorage.setItem('g4_pseudo', pseudo);
+  const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+  if(code.length!==4){ alert('Code invalide'); return; }
+  const {data, error} = await sb.from('rooms').select().eq('code',code).eq('status','waiting').single();
+  if(error||!data){ alert('Table introuvable ou partie déjà commencée.'); return; }
+  // Trouver un siège libre
+  const {data:slots} = await sb.from('room_slots').select().eq('room_id',data.id);
+  const takenSeats = (slots||[]).map(s=>s.seat);
+  const freeSeat = [0,1,2,3].find(s=>!takenSeats.includes(s));
+  if(freeSeat===undefined){ alert('Table complète.'); return; }
+  currentRoomId = data.id;
+  currentRoomCode = code;
+  mySeat = freeSeat; isHost = false;
+  await joinSeat(data.id, freeSeat, pseudo);
+  hideLobby();
+  showRoomScreen(data);
+});
+
+async function joinSeat(roomId, seat, pseudo){
+  // Upsert dans room_slots
+  await sb.from('room_slots').upsert({
+    room_id: roomId,
+    seat,
+    local_id: localPlayerId,
+    pseudo,
+    is_bot: false,
+    is_ready: false,
+    is_connected: true,
+    last_ping: new Date().toISOString()
+  }, {onConflict:'room_id,seat'});
+  await upsertPlayerStats(pseudo);
+  // Ping toutes les 15s pour signaler la présence
+  clearInterval(window._pingInterval);
+  window._pingInterval = setInterval(async ()=>{
+    await sb.from('room_slots').update({last_ping: new Date().toISOString(), is_connected:true})
+      .eq('room_id', roomId).eq('local_id', localPlayerId);
+  }, 15000);
+}
+
+/* ---- Écran de salle ---- */
+async function showRoomScreen(roomData){
+  const rs = document.getElementById('room-screen');
+  rs.style.display = 'flex';
+  document.getElementById('room-code-display').textContent = roomData.code;
+  document.getElementById('room-code-felt').textContent = roomData.code;
+  if(isHost) document.getElementById('room-options').style.display = '';
+  // Charger les slots actuels
+  const {data:slots} = await sb.from('room_slots').select().eq('room_id', roomData.id);
+  updateRoomVisual(slots||[]);
+  subscribeRoom(roomData.id);
+}
+
+function updateRoomVisual(slots){
+  const seatMap = {};
+  (slots||[]).forEach(s=>{ seatMap[s.seat]=s; });
+  for(let s=0; s<4; s++){
+    const p = seatMap[s];
+    const avatar = document.getElementById('seat-'+s+'-avatar');
+    const name = document.getElementById('seat-'+s+'-name');
+    const seatEl = document.getElementById('seat-'+s);
+    if(p && p.is_bot){
+      avatar.textContent = '🤖'; avatar.className='seat-avatar bot';
+      name.textContent = 'Bot';
+      seatEl.onclick = null;
+    } else if(p){
+      avatar.textContent = p.pseudo[0].toUpperCase();
+      avatar.className = 'seat-avatar '+(p.local_id===localPlayerId?'mine':'taken');
+      name.textContent = p.pseudo;
+      seatEl.onclick = null;
+    } else {
+      avatar.textContent = '🪑'; avatar.className='seat-avatar';
+      name.textContent = 'Libre';
+      seatEl.onclick = async ()=>{
+        if(mySeat!==null) return;
+        mySeat = s;
+        await joinSeat(currentRoomId, s, userPseudo);
+      };
+    }
+  }
+  const filled = Object.keys(seatMap).length;
+  const launchBtn = document.getElementById('btn-launch-game');
+  if(isHost && filled>=2){
+    launchBtn.style.display = '';
+    document.getElementById('room-status-msg').textContent = filled===4 ? 'Table complète — tu peux lancer !' : `${filled}/4 joueurs — tu peux lancer ou remplir avec des bots`;
+  } else {
+    launchBtn.style.display = 'none';
+    document.getElementById('room-status-msg').textContent = `${filled}/4 joueurs — En attente…`;
+  }
+}
+
+function subscribeRoom(roomId){
+  if(roomChannel) sb.removeChannel(roomChannel);
+  roomChannel = sb.channel('room-'+roomId)
+    .on('postgres_changes',{event:'*', schema:'public', table:'room_slots', filter:`room_id=eq.${roomId}`}, async ()=>{
+      const {data:slots} = await sb.from('room_slots').select().eq('room_id', roomId);
+      updateRoomVisual(slots||[]);
+    })
+    .on('postgres_changes',{event:'UPDATE', schema:'public', table:'rooms', filter:`id=eq.${roomId}`}, payload=>{
+      const d = payload.new;
+      if(d.status==='playing') startMultiplayerGame(d);
+    })
+    .subscribe();
+}
+
+// Remplir les vides avec des bots
+async function fillWithBots(roomId){
+  const {data:slots} = await sb.from('room_slots').select().eq('room_id',roomId);
+  const takenSeats = (slots||[]).map(s=>s.seat);
+  const botInserts = [0,1,2,3].filter(s=>!takenSeats.includes(s)).map(s=>({
+    room_id: roomId, seat:s, local_id:'bot_'+s,
+    pseudo: ['Bot Ouest','Bot Nord','Bot Est','Bot Sud'][s],
+    is_bot:true, is_ready:true, is_connected:true, last_ping: new Date().toISOString()
+  }));
+  if(botInserts.length>0) await sb.from('room_slots').insert(botInserts);
+}
+
+// Lancer la partie (hôte)
+document.getElementById('btn-launch-game').addEventListener('click', async ()=>{
+  optBots = document.getElementById('opt-bots').checked;
+  optTimeout = document.getElementById('opt-timeout').checked;
+  if(optBots) await fillWithBots(currentRoomId);
+  // Récupérer les slots pour construire les mains
+  const {data:slots} = await sb.from('room_slots').select().eq('room_id',currentRoomId);
+  if(!slots||slots.length<2){ alert('Pas assez de joueurs.'); return; }
+  // S'assurer que 4 sièges sont remplis
+  const takenSeats = slots.map(s=>s.seat);
+  if(takenSeats.length<4){
+    alert('Remplis les sièges vides avec des bots d\'abord.');
+    return;
+  }
+  const initDeck = shuffle(makeDeck());
+  const hands = {0:[],1:[],2:[],3:[]};
+  initDeck.forEach((c,i)=> hands[i%4].push(c));
+  // Trouver le détenteur du 1 multicolore
+  let starterSeat = 0;
+  for(let s=0;s<4;s++){
+    if(hands[s].some(c=>c.type==='rainbow1')){ starterSeat=s; break; }
+  }
+  const gameState = {
+    hands: JSON.stringify(hands),
+    currentTrick: JSON.stringify({combo:null,plays:[]}),
+    turnIndex: starterSeat,
+    direction: 1,
+    scores: JSON.stringify([0,0,0,0]),
+    roundNumber: 1,
+    passesInRow: 0,
+    lastNonPassSeat: null,
+    finishOrder: JSON.stringify([]),
+    mustOpenWithRainbow1: true,
+    opt_bots: optBots,
+    opt_timeout: optTimeout
+  };
+  await sb.from('rooms').update({
+    status:'playing',
+    game_state: gameState,
+    allow_bots: optBots,
+    turn_timeout: optTimeout ? 60 : 0
+  }).eq('id', currentRoomId);
+});
+
+// Quitter la salle
+document.getElementById('btn-leave-room').addEventListener('click', async ()=>{
+  if(currentRoomId && mySeat!==null){
+    await sb.from('room_slots').delete().eq('room_id',currentRoomId).eq('local_id',localPlayerId);
+    if(roomChannel) sb.removeChannel(roomChannel);
+    clearInterval(window._pingInterval);
+  }
+  document.getElementById('room-screen').style.display = 'none';
+  showLobby();
+  mySeat = null; currentRoomId = null; currentRoomCode = null; isHost = false;
+});
+
+/* ---- Démarrage d'une partie multijoueur ---- */
+async function startMultiplayerGame(roomData){
+  document.getElementById('room-screen').style.display = 'none';
+  isMultiplayer = true;
+  const gs = typeof roomData.game_state === 'string' ? JSON.parse(roomData.game_state) : roomData.game_state;
+  // Récupérer les slots pour connaître les pseudos et qui est bot
+  const {data:slots} = await sb.from('room_slots').select().eq('room_id', roomData.id);
+  const seatMap = {};
+  (slots||[]).forEach(s=>{ seatMap[s.seat]=s; });
+  const hands = typeof gs.hands==='string' ? JSON.parse(gs.hands) : gs.hands;
+  players = [0,1,2,3].map(s=>({
+    name: seatMap[s]?.pseudo || 'Bot',
+    hand: sortHand(hands[s]||[]),
+    isHuman: seatMap[s]?.local_id === localPlayerId,
+    isBot: seatMap[s]?.is_bot || false,
+    seat: s
+  }));
+  scores = typeof gs.scores==='string' ? JSON.parse(gs.scores) : gs.scores;
+  roundNumber = gs.roundNumber||1;
+  direction = gs.direction||1;
+  turnIndex = gs.turnIndex||0;
+  currentTrick = typeof gs.currentTrick==='string' ? JSON.parse(gs.currentTrick) : gs.currentTrick;
+  finishOrder = typeof gs.finishOrder==='string' ? JSON.parse(gs.finishOrder) : gs.finishOrder;
+  firstRoundEver = true;
+  mustOpenWithRainbow1 = gs.mustOpenWithRainbow1||false;
+  optBots = gs.opt_bots!==false;
+  optTimeout = gs.opt_timeout!==false;
+
+  subscribeGameMoves(roomData.id);
+  renderAll();
+  updateDirectionIndicator();
+  toast(`Partie lancée ! Tu joues au siège ${['Sud','Ouest','Nord','Est'][mySeat]}.`, 3000);
+  if(optTimeout && turnIndex!==undefined) startTurnTimer();
+  if(players[turnIndex]?.isBot) setTimeout(()=>botPlay(turnIndex),1200);
+}
+
+function subscribeGameMoves(roomId){
+  sb.channel('moves-'+roomId)
+    .on('postgres_changes',{event:'INSERT', schema:'public', table:'moves', filter:`room_id=eq.${roomId}`}, payload=>{
+      applyRemoteMove(payload.new);
+    })
+    .subscribe();
+}
+
+async function sendMove(type, cards){
+  await sb.from('moves').insert({
+    room_id: currentRoomId,
+    round_number: roundNumber,
+    seat: mySeat,
+    action: type,
+    cards: cards.map(c=>c.id)
+  });
+}
+
+function applyRemoteMove(move){
+  if(move.seat === mySeat) return; // c'est notre propre move, déjà appliqué localement
+  if(move.action==='play'){
+    const cardIds = move.cards||[];
+    const cards = cardIds.map(id=>players[move.seat].hand.find(c=>c.id===id)).filter(Boolean);
+    if(cards.length>0) playCards(move.seat, cards);
+  } else {
+    passTurn(move.seat);
+  }
+  renderAll();
+  stopTurnTimer();
+  if(optTimeout) startTurnTimer();
+  proceedAfterMove();
+}
+
+/* ---- Minuteur de tour ---- */
+function startTurnTimer(){
+  clearInterval(turnTimer);
+  turnTimerSec = 60;
+  const timerEl = document.getElementById('turn-timer');
+  timerEl.classList.add('show');
+  timerEl.classList.remove('urgent');
+  timerEl.textContent = turnTimerSec;
+  turnTimer = setInterval(()=>{
+    turnTimerSec--;
+    timerEl.textContent = turnTimerSec;
+    if(turnTimerSec<=10) timerEl.classList.add('urgent');
+    if(turnTimerSec<=0){
+      clearInterval(turnTimer);
+      timerEl.classList.remove('show');
+      // Timeout : passer automatiquement
+      if(players[turnIndex].isHuman){
+        passTurn(turnIndex);
+        if(isMultiplayer) sendMove('pass',[]);
+        renderAll();
+        proceedAfterMove();
+      }
+    }
+  },1000);
+}
+function stopTurnTimer(){
+  clearInterval(turnTimer);
+  document.getElementById('turn-timer').classList.remove('show');
+}
+
+/* ---- Stats / Classement ---- */
+async function upsertPlayerStats(pseudo){
+  const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
+  if(!data){
+    await sb.from('players').insert({
+      local_id: localPlayerId, pseudo,
+      games_played:0, games_won:0, total_points:0
+    }).catch(()=>{});
+  } else if(data.pseudo!==pseudo){
+    await sb.from('players').update({pseudo, last_seen: new Date().toISOString()}).eq('local_id',localPlayerId).catch(()=>{});
+  }
+}
+
+async function recordWin(){
+  const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
+  if(data){
+    await sb.from('players').update({
+      games_won: (data.games_won||0)+1,
+      games_played: (data.games_played||0)+1,
+      last_seen: new Date().toISOString()
+    }).eq('local_id',localPlayerId).catch(()=>{});
+  }
+}
+
+async function recordGame(score){
+  const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
+  if(data){
+    await sb.from('players').update({
+      games_played: (data.games_played||0)+1,
+      total_points: (data.total_points||0)+score,
+      last_seen: new Date().toISOString()
+    }).eq('local_id',localPlayerId).catch(()=>{});
+  }
+}
+
+async function loadRanking(){
+  const {data, error} = await sb.from('players')
+    .select('pseudo,games_won,games_played,total_points')
+    .order('games_won',{ascending:false})
+    .limit(20);
+  const list = document.getElementById('rank-list');
+  if(error||!data||data.length===0){
+    list.innerHTML = '<p style="text-align:center;opacity:0.6;">Aucune donnée encore. Joue des parties !</p>';
+    return;
+  }
+  list.innerHTML = data.map((p,i)=>`
+    <div class="rank-row">
+      <div class="rank-pos">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div>
+      <div class="rank-name">${p.pseudo}</div>
+      <div class="rank-stat">${p.games_won} victoire${p.games_won>1?'s':''}<br><span style="opacity:0.6; font-size:11px;">${p.games_played} parties</span></div>
+    </div>
+  `).join('');
+}
+
+/* ---- Démarrage ---- */
+showLobby();
 </script>
 </body>
 </html>
