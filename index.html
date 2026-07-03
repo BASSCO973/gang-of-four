@@ -1983,37 +1983,43 @@ function stopTurnTimer(){
 
 /* ---- Stats / Classement ---- */
 async function upsertPlayerStats(pseudo){
-  const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
-  if(!data){
-    await sb.from('players').insert({
-      local_id: localPlayerId, pseudo,
-      games_played:0, games_won:0, total_points:0
-    }).catch(()=>{});
-  } else if(data.pseudo!==pseudo){
-    await sb.from('players').update({pseudo, last_seen: new Date().toISOString()}).eq('local_id',localPlayerId).catch(()=>{});
-  }
+  try {
+    const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
+    if(!data){
+      await sb.from('players').insert({
+        local_id: localPlayerId, pseudo,
+        games_played:0, games_won:0, total_points:0
+      });
+    } else if(data.pseudo!==pseudo){
+      await sb.from('players').update({pseudo, last_seen: new Date().toISOString()}).eq('local_id',localPlayerId);
+    }
+  } catch(e){ console.warn('upsertPlayerStats:', e); }
 }
 
 async function recordWin(){
-  const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
-  if(data){
-    await sb.from('players').update({
-      games_won: (data.games_won||0)+1,
-      games_played: (data.games_played||0)+1,
-      last_seen: new Date().toISOString()
-    }).eq('local_id',localPlayerId).catch(()=>{});
-  }
+  try {
+    const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
+    if(data){
+      await sb.from('players').update({
+        games_won: (data.games_won||0)+1,
+        games_played: (data.games_played||0)+1,
+        last_seen: new Date().toISOString()
+      }).eq('local_id',localPlayerId);
+    }
+  } catch(e){ console.warn('recordWin:', e); }
 }
 
 async function recordGame(score){
-  const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
-  if(data){
-    await sb.from('players').update({
-      games_played: (data.games_played||0)+1,
-      total_points: (data.total_points||0)+score,
-      last_seen: new Date().toISOString()
-    }).eq('local_id',localPlayerId).catch(()=>{});
-  }
+  try {
+    const {data} = await sb.from('players').select().eq('local_id',localPlayerId).maybeSingle();
+    if(data){
+      await sb.from('players').update({
+        games_played: (data.games_played||0)+1,
+        total_points: (data.total_points||0)+score,
+        last_seen: new Date().toISOString()
+      }).eq('local_id',localPlayerId);
+    }
+  } catch(e){ console.warn('recordGame:', e); }
 }
 
 async function loadRanking(){
