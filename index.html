@@ -1713,19 +1713,31 @@ document.getElementById('btn-confirm-join').addEventListener('click', async ()=>
   localStorage.setItem('g4_pseudo', pseudo);
   const code = document.getElementById('join-code-input').value.trim().toUpperCase();
   if(code.length!==4){ alert('Code invalide'); return; }
-  const {data, error} = await sb.from('rooms').select().eq('code',code).eq('status','waiting').single();
-  if(error||!data){ alert('Table introuvable ou partie déjà commencée.'); return; }
-  // Trouver un siège libre
-  const {data:slots} = await sb.from('room_slots').select().eq('room_id',data.id);
-  const takenSeats = (slots||[]).map(s=>s.seat);
-  const freeSeat = [0,1,2,3].find(s=>!takenSeats.includes(s));
-  if(freeSeat===undefined){ alert('Table complète.'); return; }
-  currentRoomId = data.id;
-  currentRoomCode = code;
-  mySeat = freeSeat; isHost = false;
-  await joinSeat(data.id, freeSeat, pseudo);
-  hideLobby();
-  showRoomScreen(data);
+  const btn = document.getElementById('btn-confirm-join');
+  btn.disabled = true; btn.textContent = '⏳ Connexion…';
+  try {
+    const {data:room, error:roomErr} = await sb.from('rooms').select().eq('code',code).eq('status','waiting').single();
+    console.log('Room trouvée:', JSON.stringify(room), roomErr);
+    if(roomErr||!room){ alert('Table introuvable ou partie déjà commencée.'); return; }
+    const {data:slots, error:slotsErr} = await sb.from('room_slots').select().eq('room_id',room.id);
+    console.log('Slots actuels:', JSON.stringify(slots), slotsErr);
+    const takenSeats = (slots||[]).map(s=>s.seat);
+    console.log('Sièges pris:', takenSeats);
+    const freeSeat = [0,1,2,3].find(s=>!takenSeats.includes(s));
+    console.log('Siège libre:', freeSeat);
+    if(freeSeat===undefined){ alert(`Table complète (${takenSeats.length}/4 sièges pris: ${takenSeats.join(',')})`); return; }
+    currentRoomId = room.id;
+    currentRoomCode = code;
+    mySeat = freeSeat; isHost = false;
+    await joinSeat(room.id, freeSeat, pseudo);
+    hideLobby();
+    showRoomScreen(room);
+  } catch(e){
+    alert('Erreur : ' + (e.message || JSON.stringify(e)));
+    console.error(e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Rejoindre la table';
+  }
 });
 
 async function joinSeat(roomId, seat, pseudo){
