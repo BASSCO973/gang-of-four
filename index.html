@@ -1741,8 +1741,10 @@ document.getElementById('btn-confirm-join').addEventListener('click', async ()=>
 });
 
 async function joinSeat(roomId, seat, pseudo){
-  // Upsert dans room_slots
-  await sb.from('room_slots').upsert({
+  // Vérifier qu'on n'est pas déjà assis
+  const {data:existing} = await sb.from('room_slots').select().eq('room_id',roomId).eq('local_id',localPlayerId).maybeSingle();
+  if(existing){ console.log('Déjà assis au siège', existing.seat); return; }
+  const {error} = await sb.from('room_slots').insert({
     room_id: roomId,
     seat,
     local_id: localPlayerId,
@@ -1751,9 +1753,9 @@ async function joinSeat(roomId, seat, pseudo){
     is_ready: false,
     is_connected: true,
     last_ping: new Date().toISOString()
-  }, {onConflict:'room_id,seat'});
+  });
+  if(error){ console.error('joinSeat error:', JSON.stringify(error)); throw new Error(error.message); }
   await upsertPlayerStats(pseudo);
-  // Ping toutes les 15s pour signaler la présence
   clearInterval(window._pingInterval);
   window._pingInterval = setInterval(async ()=>{
     await sb.from('room_slots').update({last_ping: new Date().toISOString(), is_connected:true})
