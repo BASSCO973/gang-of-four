@@ -1685,8 +1685,9 @@ document.getElementById('btn-create-room').addEventListener('click', async ()=>{
       host_local_id: localPlayerId,
       status: 'waiting'
     }).select().single();
-    console.log('Résultat:', data, error);
-    if(error) throw error;
+    console.log('Résultat data:', JSON.stringify(data));
+    console.log('Résultat error:', JSON.stringify(error));
+    if(error) throw new Error(JSON.stringify(error));
     currentRoomId = data.id;
     currentRoomCode = code;
     mySeat = 0; isHost = true;
