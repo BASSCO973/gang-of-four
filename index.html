@@ -1612,11 +1612,16 @@ const SUPABASE_KEY = 'sb_publishable_faYk9e2SRQot-a-pTQN7Mg_eZIxTa4z';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ID unique persistant du joueur sur cet appareil
-let localPlayerId = localStorage.getItem('g4_player_id');
-if(!localPlayerId){
-  localPlayerId = 'p_' + Math.random().toString(36).slice(2,10);
-  localStorage.setItem('g4_player_id', localPlayerId);
+function getLocalPlayerId(){
+  let id = localStorage.getItem('g4_player_id');
+  if(!id || id === 'null' || id === 'undefined'){
+    id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+    localStorage.setItem('g4_player_id', id);
+  }
+  return id;
 }
+let localPlayerId = getLocalPlayerId();
+console.log('localPlayerId:', localPlayerId);
 
 let isMultiplayer = false;
 let currentRoomId = null;
@@ -1741,6 +1746,9 @@ document.getElementById('btn-confirm-join').addEventListener('click', async ()=>
 });
 
 async function joinSeat(roomId, seat, pseudo){
+  localPlayerId = getLocalPlayerId(); // re-vérification
+  console.log('joinSeat appelé — roomId:', roomId, 'seat:', seat, 'localPlayerId:', localPlayerId);
+  if(!localPlayerId){ alert('Erreur : identifiant joueur manquant. Recharge la page.'); return; }
   // Vérifier qu'on n'est pas déjà assis quelque part dans cette room
   const {data:existing} = await sb.from('room_slots').select().eq('room_id',roomId).eq('local_id',localPlayerId).maybeSingle();
   if(existing){ console.log('Déjà assis au siège', existing.seat); return; }
