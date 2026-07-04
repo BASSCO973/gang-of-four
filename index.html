@@ -1950,14 +1950,28 @@ async function startMultiplayerGame(roomData){
   const {data:slots} = await sb.from('room_slots').select().eq('room_id', roomData.id).not('local_id','is',null);
   const seatMap = {};
   (slots||[]).forEach(s=>{ seatMap[s.seat]=s; });
-  const hands = typeof gs.hands==='string' ? JSON.parse(gs.hands) : gs.hands;
+  const handsRaw = typeof gs.hands==='string' ? JSON.parse(gs.hands) : gs.hands;
+  // Les clés du JSON sont des strings ("0","1"...) — forcer la conversion
+  const hands = {};
+  [0,1,2,3].forEach(s=>{ hands[s] = handsRaw[s] || handsRaw[String(s)] || []; });
+
+  // Reconstruire les cartes complètes depuis le deck maître (évite la perte de propriétés à la sérialisation)
+  const masterDeck = makeDeck();
+  function rehydrateHand(rawCards){
+    return sortHand(rawCards.map(rc=>{
+      const found = masterDeck.find(c=>c.id===rc.id);
+      return found || rc;
+    }));
+  }
+
   players = [0,1,2,3].map(s=>({
-    name: seatMap[s]?.pseudo || 'Bot',
-    hand: sortHand(hands[s]||[]),
+    name: seatMap[s]?.pseudo || `Bot ${s}`,
+    hand: rehydrateHand(hands[s]||[]),
     isHuman: seatMap[s]?.local_id === localPlayerId,
     isBot: seatMap[s]?.is_bot || false,
     seat: s
   }));
+  console.log('Mon siège:', mySeat, 'isHuman:', players[mySeat]?.isHuman, 'localPlayerId:', localPlayerId, 'slot local_id:', seatMap[mySeat]?.local_id);
   scores = typeof gs.scores==='string' ? JSON.parse(gs.scores) : gs.scores;
   roundNumber = gs.roundNumber||1;
   direction = gs.direction||1;
@@ -1991,15 +2005,19 @@ async function sendMove(type, cards){
     round_number: roundNumber,
     seat: mySeat,
     action: type,
-    cards: cards.map(c=>c.id)
+    cards: cards.map(c=>({id:c.id, type:c.type, rank:c.rank, suit:c.suit, power:c.power, name:c.name, label:c.label}))
   });
 }
 
 function applyRemoteMove(move){
-  if(move.seat === mySeat) return; // c'est notre propre move, déjà appliqué localement
+  if(move.seat === mySeat) return;
   if(move.action==='play'){
-    const cardIds = move.cards||[];
-    const cards = cardIds.map(id=>players[move.seat].hand.find(c=>c.id===id)).filter(Boolean);
+    const movecards = move.cards||[];
+    // Cherche d'abord par ID dans la main, sinon utilise les données complètes du move
+    const cards = movecards.map(mc=>{
+      const found = players[move.seat].hand.find(c=>c.id===mc.id);
+      return found || mc; // fallback : utilise l'objet carte du move directement
+    }).filter(Boolean);
     if(cards.length>0) playCards(move.seat, cards);
   } else {
     passTurn(move.seat);
