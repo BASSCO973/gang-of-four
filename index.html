@@ -456,6 +456,10 @@ function currentPlayerNames(){
 
 let deck = [];
 let players = []; // {name, hand:[], isHuman, seat}
+
+// Retourne l'index du joueur humain dans le tableau players (0 en solo, variable en multi)
+function humanSeat(){ return players.findIndex(p=>p.isHuman); }
+function isMyTurn(){ return turnIndex === humanSeat(); }
 let direction = 1; // 1 = droite vers gauche (sens de la 1ère manche), -1 = gauche vers droite
 let currentLeader = 0;
 let turnIndex = 0;
@@ -1205,13 +1209,21 @@ function proceedAfterMove(){
 
 function maybeBotTurn(){
   if(gameOver) return;
-  if(players[turnIndex].hand.length===0){
+  if(players[turnIndex] && players[turnIndex].hand.length===0){
     advanceTurn();
   }
-  if(!players[turnIndex].isHuman){
+  const currentPlayer = players[turnIndex];
+  if(!currentPlayer) return;
+  // En multijoueur : les humains distants ne sont pas isHuman, on ne joue pas pour eux
+  // On joue uniquement pour les bots (isBot) ou en solo pour tous les non-humains
+  const shouldBotPlay = currentPlayer.isBot || (!isMultiplayer && !currentPlayer.isHuman);
+  if(shouldBotPlay){
     setTimeout(()=>botPlay(turnIndex), 800);
-  } else {
+  } else if(currentPlayer.isHuman){
     document.getElementById('player-turn-label').textContent = 'À toi de jouer';
+  } else {
+    // Joueur humain distant en multijoueur — on attend son move via Supabase
+    document.getElementById('player-turn-label').textContent = `Tour de ${currentPlayer.name}…`;
   }
 }
 
@@ -1223,7 +1235,8 @@ function toggleCardSelect(card, el){
 }
 
 document.getElementById('btn-play').addEventListener('click', ()=>{
-  if(turnIndex!==0) return;
+  const hs = humanSeat();
+  if(turnIndex!==hs) return;
   if(selectedCards.length===0){ toast('Sélectionne au moins une carte.'); return; }
   const combo = evaluateCombo(selectedCards);
   if(!combo){
@@ -1241,8 +1254,8 @@ document.getElementById('btn-play').addEventListener('click', ()=>{
     return;
   }
   mustOpenWithRainbow1 = false;
-  if(isDefensiveSituation(0)){
-    const sorted = sortHand(players[0].hand);
+  if(isDefensiveSituation(hs)){
+    const sorted = sortHand(players[hs].hand);
     const highestCard = sorted[sorted.length-1];
     if(currentTrick.combo===null){
       if(selectedCards.length===1 && selectedCards[0]!==highestCard){
@@ -1257,7 +1270,7 @@ document.getElementById('btn-play').addEventListener('click', ()=>{
     }
   }
   const cardsToPlay = selectedCards.slice();
-  playCards(0, cardsToPlay);
+  playCards(hs, cardsToPlay);
   selectedCards = [];
   highlightedExchangeCard = null;
   if(isMultiplayer) sendMove('play', cardsToPlay);
@@ -1267,9 +1280,10 @@ document.getElementById('btn-play').addEventListener('click', ()=>{
 });
 
 document.getElementById('btn-pass').addEventListener('click', ()=>{
-  if(turnIndex!==0) return;
+  const hs = humanSeat();
+  if(turnIndex!==hs) return;
   if(!currentTrick.combo){ toast('Tu ouvres le pli : tu dois jouer.'); return; }
-  passTurn(0);
+  passTurn(hs);
   selectedCards = [];
   highlightedExchangeCard = null;
   if(isMultiplayer) sendMove('pass', []);
@@ -1314,9 +1328,11 @@ function renderMiniCards(seat, containerId, countId){
 }
 
 function renderHand(){
+  const hs = humanSeat();
   const cont = document.getElementById('hand-track');
   cont.innerHTML='';
-  players[0].hand.forEach(c=>{
+  if(hs<0 || !players[hs]) return;
+  players[hs].hand.forEach(c=>{
     const el = document.createElement('div');
     el.className = 'card ' + cardColorClass(c);
     el.innerHTML = `<div class="rank">${cardLabel(c)}</div>` + (c.type==='number'?`<div class="suit-dot" style="background:${suitColor(c.suit)}"></div>`:'');
@@ -1348,22 +1364,39 @@ function renderTrick(){
 }
 
 function renderTurnHighlight(){
+  const hs = humanSeat();
   ['opp-left','opp-top','opp-right'].forEach(id=>document.getElementById(id).classList.remove('active'));
-  const map = {1:'opp-left',2:'opp-top',3:'opp-right'};
-  if(map[turnIndex]) document.getElementById(map[turnIndex]).classList.add('active');
+  // Positions relatives par rapport au joueur humain
+  const leftSeat  = (hs+1)%4;
+  const topSeat   = (hs+2)%4;
+  const rightSeat = (hs+3)%4;
+  const posMap = {};
+  posMap[leftSeat]  = 'opp-left';
+  posMap[topSeat]   = 'opp-top';
+  posMap[rightSeat] = 'opp-right';
+  if(posMap[turnIndex]) document.getElementById(posMap[turnIndex]).classList.add('active');
   const label = document.getElementById('player-turn-label');
-  label.textContent = turnIndex===0 ? 'À toi de jouer' : `Tour de ${players[turnIndex].name}`;
-  document.getElementById('btn-play').disabled = turnIndex!==0;
-  document.getElementById('btn-pass').disabled = turnIndex!==0 || !currentTrick.combo;
+  label.textContent = turnIndex===hs ? 'À toi de jouer' : `Tour de ${players[turnIndex]?.name||''}`;
+  document.getElementById('btn-play').disabled = !isMyTurn();
+  document.getElementById('btn-pass').disabled = !isMyTurn() || !currentTrick.combo;
 }
 
 function renderAll(){
-  document.querySelector('#opp-left .hand-count').textContent = `${players[1].hand.length} cartes`;
-  document.querySelector('#opp-top .hand-count').textContent = `${players[2].hand.length} cartes`;
-  document.querySelector('#opp-right .hand-count').textContent = `${players[3].hand.length} cartes`;
-  renderMini(1,'opp-left-cards');
-  renderMini(2,'opp-top-cards');
-  renderMini(3,'opp-right-cards');
+  if(!players || players.length<4) return;
+  const hs = humanSeat()<0 ? 0 : humanSeat();
+  const leftSeat  = (hs+1)%4;
+  const topSeat   = (hs+2)%4;
+  const rightSeat = (hs+3)%4;
+  // Noms des adversaires
+  document.querySelector('#opp-left .name').textContent  = players[leftSeat]?.name  || 'Joueur Ouest';
+  document.querySelector('#opp-top .name').textContent   = players[topSeat]?.name   || 'Joueur Nord';
+  document.querySelector('#opp-right .name').textContent = players[rightSeat]?.name || 'Joueur Est';
+  document.querySelector('#opp-left .hand-count').textContent  = `${players[leftSeat]?.hand.length||0} cartes`;
+  document.querySelector('#opp-top .hand-count').textContent   = `${players[topSeat]?.hand.length||0} cartes`;
+  document.querySelector('#opp-right .hand-count').textContent = `${players[rightSeat]?.hand.length||0} cartes`;
+  renderMini(leftSeat, 'opp-left-cards');
+  renderMini(topSeat,  'opp-top-cards');
+  renderMini(rightSeat,'opp-right-cards');
   renderHand();
   renderTrick();
   renderTurnHighlight();
@@ -1613,10 +1646,11 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ID unique persistant du joueur sur cet appareil
 function getLocalPlayerId(){
-  let id = localStorage.getItem('g4_player_id');
+  // sessionStorage = unique par onglet (contrairement à localStorage partagé entre onglets)
+  let id = sessionStorage.getItem('g4_player_id');
   if(!id || id === 'null' || id === 'undefined'){
     id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
-    localStorage.setItem('g4_player_id', id);
+    sessionStorage.setItem('g4_player_id', id);
   }
   return id;
 }
@@ -1752,8 +1786,10 @@ async function joinSeat(roomId, seat, pseudo){
   // Vérifier qu'on n'est pas déjà assis quelque part dans cette room
   const {data:existing} = await sb.from('room_slots').select().eq('room_id',roomId).eq('local_id',localPlayerId).maybeSingle();
   if(existing){ console.log('Déjà assis au siège', existing.seat); return; }
-  // Upsert : si une ligne existe déjà pour ce siège (ex: NULL), on la remplace
-  const {error} = await sb.from('room_slots').upsert({
+  // Supprimer toute ligne existante pour ce siège avant d'insérer
+  await sb.from('room_slots').delete().eq('room_id', roomId).eq('seat', seat);
+  console.log('Insert avec local_id:', localPlayerId);
+  const {error} = await sb.from('room_slots').insert({
     room_id: roomId,
     seat,
     local_id: localPlayerId,
@@ -1762,7 +1798,7 @@ async function joinSeat(roomId, seat, pseudo){
     is_ready: false,
     is_connected: true,
     last_ping: new Date().toISOString()
-  }, { onConflict: 'room_id,seat' });
+  });
   if(error){ console.error('joinSeat error:', JSON.stringify(error)); throw new Error(error.message); }
   await upsertPlayerStats(pseudo);
   clearInterval(window._pingInterval);
