@@ -2013,11 +2013,14 @@ function applyRemoteMove(move){
   if(move.seat === mySeat) return;
   if(move.action==='play'){
     const movecards = move.cards||[];
-    // Cherche d'abord par ID dans la main, sinon utilise les données complètes du move
     const cards = movecards.map(mc=>{
       const found = players[move.seat].hand.find(c=>c.id===mc.id);
-      return found || mc; // fallback : utilise l'objet carte du move directement
+      return found || mc;
     }).filter(Boolean);
+    // Réinitialiser mustOpenWithRainbow1 si le joueur distant a joué le 1 multicolore
+    if(mustOpenWithRainbow1 && cards.some(c=>c.type==='rainbow1')){
+      mustOpenWithRainbow1 = false;
+    }
     if(cards.length>0) playCards(move.seat, cards);
   } else {
     passTurn(move.seat);
