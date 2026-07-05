@@ -393,6 +393,7 @@
     <button class="score-pill" id="btn-settings" style="cursor:pointer;">⚙️</button>
     <button class="score-pill" id="btn-history" style="cursor:pointer;">📜</button>
     <button class="score-pill" id="btn-info" style="cursor:pointer;">❓</button>
+    <button class="score-pill" id="btn-quit-game" style="cursor:pointer; display:none;">🚪</button>
   </div>
 </div>
 
@@ -1185,9 +1186,22 @@ function botPlay(seat){
     mustOpenWithRainbow1 = false;
     playCards(seat, chosen.cards);
     showBubble(seat, chosen.cards.map(cardLabel).join(' '));
+    // En multijoueur, l'hôte envoie les moves des bots à Supabase
+    if(isMultiplayer && isHost){
+      const prevMySeat = mySeat;
+      mySeat = seat; // temporairement pour sendMove
+      sendMove('play', chosen.cards);
+      mySeat = prevMySeat;
+    }
   } else {
     passTurn(seat);
     showBubble(seat, 'Passe');
+    if(isMultiplayer && isHost){
+      const prevMySeat = mySeat;
+      mySeat = seat;
+      sendMove('pass', []);
+      mySeat = prevMySeat;
+    }
   }
   renderAll();
   proceedAfterMove();
@@ -1214,15 +1228,16 @@ function maybeBotTurn(){
   }
   const currentPlayer = players[turnIndex];
   if(!currentPlayer) return;
-  // En multijoueur : les humains distants ne sont pas isHuman, on ne joue pas pour eux
-  // On joue uniquement pour les bots (isBot) ou en solo pour tous les non-humains
-  const shouldBotPlay = currentPlayer.isBot || (!isMultiplayer && !currentPlayer.isHuman);
-  if(shouldBotPlay){
+  // En multijoueur : seul l'hôte joue les bots
+  const canPlayBot = !isMultiplayer || isHost;
+  const shouldBotPlay = currentPlayer.isBot && canPlayBot;
+  const shouldBotPlaySolo = !isMultiplayer && !currentPlayer.isHuman;
+  if(shouldBotPlay || shouldBotPlaySolo){
     setTimeout(()=>botPlay(turnIndex), 800);
   } else if(currentPlayer.isHuman){
     document.getElementById('player-turn-label').textContent = 'À toi de jouer';
   } else {
-    // Joueur humain distant en multijoueur — on attend son move via Supabase
+    // Joueur humain distant ou bot géré par l'hôte — on attend
     document.getElementById('player-turn-label').textContent = `Tour de ${currentPlayer.name}…`;
   }
 }
@@ -1514,6 +1529,47 @@ function saveHistoryEntry(entry){
   localStorage.setItem('g4_history', JSON.stringify(hist));
 }
 
+document.getElementById('btn-quit-game').addEventListener('click', ()=>{
+  const panel = document.getElementById('panel-content');
+  panel.innerHTML = `
+    <h2>🚪 Quitter la partie</h2>
+    <p style="color:var(--paper); font-size:13px; margin-bottom:20px;">
+      ${isMultiplayer
+        ? 'Tu vas quitter la partie en cours. Les autres joueurs continueront avec un bot à ta place.'
+        : 'Tu vas abandonner la partie en cours et revenir au menu principal.'}
+    </p>
+    <div style="display:flex; gap:10px;">
+      <button class="btn" id="btn-cancel-quit" style="flex:1;">Annuler</button>
+      <button class="btn" id="btn-confirm-quit" style="flex:1; background:linear-gradient(180deg,#8b1a1a,#5c0f0f); color:var(--paper);">Quitter</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('btn-cancel-quit').addEventListener('click', ()=>{
+    document.getElementById('overlay').classList.remove('show');
+  });
+  document.getElementById('btn-confirm-quit').addEventListener('click', async ()=>{
+    document.getElementById('overlay').classList.remove('show');
+    // Nettoyage multijoueur
+    if(isMultiplayer && currentRoomId){
+      // Marquer le slot comme déconnecté
+      await sb.from('room_slots').update({is_connected:false})
+        .eq('room_id', currentRoomId).eq('local_id', localPlayerId);
+      if(roomChannel) sb.removeChannel(roomChannel);
+      clearInterval(window._pingInterval);
+      stopTurnTimer();
+      isMultiplayer = false;
+      currentRoomId = null; currentRoomCode = null;
+    }
+    // Réinitialiser l'état du jeu
+    scores = [0,0,0,0]; roundNumber = 1; firstRoundEver = true;
+    finishOrder = []; players = []; gameOver = false;
+    dealerSeat = Math.floor(Math.random()*4);
+    roundDiscardPile = []; selectedCards = [];
+    document.getElementById('btn-quit-game').style.display = 'none';
+    showLobby();
+  });
+});
+
 document.getElementById('btn-info').addEventListener('click', ()=>{
   const panel = document.getElementById('panel-content');
   panel.innerHTML = `
@@ -1677,12 +1733,14 @@ function generateCode(){
 /* ---- LOBBY UI ---- */
 function showLobby(){
   document.getElementById('lobby-screen').classList.add('show');
+  document.getElementById('btn-quit-game').style.display = 'none';
   const saved = localStorage.getItem('g4_pseudo') || '';
   document.getElementById('pseudo-lobby').value = saved;
   document.getElementById('pseudo-multi').value = saved;
 }
 function hideLobby(){
   document.getElementById('lobby-screen').classList.remove('show');
+  document.getElementById('btn-quit-game').style.display = '';
 }
 
 // Tabs
