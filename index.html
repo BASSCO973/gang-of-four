@@ -543,13 +543,15 @@ function evaluateCombo(cards){
   }
   if(n===2){
     if(sameRank(sorted) ){
-      return {type:'pair', count:2, power: Math.max(sorted[0].power, sorted[1].power), highCard: sorted[1]};
+      // Puissance = carte haute * 1000 + carte basse (départage si carte haute égale)
+      return {type:'pair', count:2, power: sorted[1].power * 1000 + sorted[0].power, highCard: sorted[1]};
     }
     return null;
   }
   if(n===3){
     if(sameRank(sorted)){
-      return {type:'triple', count:3, power: sorted[2].power, highCard: sorted[2]};
+      // Puissance = carte haute * 10000 + carte moyenne * 100 + carte basse
+      return {type:'triple', count:3, power: sorted[2].power * 10000 + sorted[1].power * 100 + sorted[0].power, highCard: sorted[2]};
     }
     return null;
   }
