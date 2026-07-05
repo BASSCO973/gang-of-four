@@ -2046,13 +2046,16 @@ function startTurnTimer(){
     if(turnTimerSec<=0){
       clearInterval(turnTimer);
       timerEl.classList.remove('show');
-      // Timeout : passer automatiquement
-      if(players[turnIndex].isHuman){
+      const currentPlayer = players[turnIndex];
+      if(!currentPlayer) return;
+      // Timeout : passer automatiquement SEULEMENT pour les bots
+      // Jamais pour un joueur humain réel (local ou distant)
+      if(currentPlayer.isBot){
         passTurn(turnIndex);
-        if(isMultiplayer) sendMove('pass',[]);
         renderAll();
         proceedAfterMove();
       }
+      // Pour un humain distant, on attend sans forcer — pas de passage automatique
     }
   },1000);
 }
