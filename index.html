@@ -417,6 +417,7 @@
   </div>
 
   <div id="center-area">
+    <div id="exchange-bubble" style="display:none; background:rgba(0,0,0,0.55); border:1px solid var(--gold); border-radius:10px; padding:7px 12px; font-size:12px; color:var(--gold-bright); text-align:center; margin-bottom:4px; max-width:90vw;"></div>
     <div id="direction-indicator">↺</div>
     <div id="trick-label">Pli en cours</div>
     <div id="trick-zone"></div>
@@ -750,10 +751,36 @@ function promptCutDeck(pile, callback){
   });
 }
 
-function finishDealStart(){
+async function finishDealStart(){
   renderAll();
   turnIndex = currentLeader;
   renderAll();
+  // En multijoueur, l'hôte sauvegarde l'état complet pour synchroniser les autres clients
+  if(isMultiplayer && isHost){
+    const hands = {};
+    players.forEach((p,i)=>{ hands[i]=p.hand; });
+    const gameState = {
+      hands: JSON.stringify(hands),
+      currentTrick: JSON.stringify({combo:null,plays:[]}),
+      turnIndex,
+      direction,
+      scores: JSON.stringify(scores),
+      roundNumber,
+      passesInRow: 0,
+      lastNonPassSeat: null,
+      finishOrder: JSON.stringify([]),
+      mustOpenWithRainbow1: false,
+      opt_bots: optBots,
+      opt_timeout: optTimeout
+    };
+    await sb.from('rooms').update({
+      game_state: gameState,
+      current_round: roundNumber,
+      status: 'playing'
+    }).eq('id', currentRoomId);
+    // Supprimer les anciens moves de la manche précédente
+    await sb.from('moves').delete().eq('room_id', currentRoomId).eq('round_number', roundNumber-1);
+  }
   maybeBotTurn();
 }
 
@@ -801,6 +828,8 @@ let lastRoundLoser=null, lastRoundWinner=null;
 // Etape 1 (toujours automatique) : le perdant donne sa meilleure carte au gagnant.
 // Etape 2 : le gagnant choisit librement la carte qu'il redonne au perdant (lui-même s'il est humain, sinon l'IA choisit).
 let highlightedExchangeCard = null;
+let exchangeBubbleText = null; // texte de la bulle d'échange
+let tricksPlayedThisRound = 0; // compteur de plis joués dans la manche en cours
 
 function doCardExchangeStep1(){
   if(lastRoundWinner===null||lastRoundLoser===null) return null;
@@ -814,7 +843,7 @@ function doCardExchangeStep1(){
   currentLeader = lastRoundWinner;
   if(lastRoundWinner===0){
     highlightedExchangeCard = bestCard;
-    toast(`Tu as remporté la manche : ${loser.name} te donne sa meilleure carte, le ${cardLabel(bestCard)} (entourée en doré dans ta main).`, 4500);
+    toast(`Tu as remporté la manche : ${loser.name} te donne le ${cardLabel(bestCard)} (entourée en doré).`, 4500);
   } else {
     toast(`${loser.name} donne sa meilleure carte (${cardLabel(bestCard)}) à ${winner.name}.`, 3000);
   }
@@ -824,11 +853,14 @@ function doCardExchangeStep2(givenCard){
   const loser = players[lastRoundLoser];
   loser.hand.push(givenCard);
   players.forEach(p=>p.hand=sortHand(p.hand));
+  const winner = players[lastRoundWinner];
+  exchangeBubbleText = `🔄 ${loser.name} → ${winner.name} : meilleure carte | ${winner.name} → ${loser.name} : ${cardLabel(givenCard)}`;
+  tricksPlayedThisRound = 0;
   if(lastRoundLoser===0){
     highlightedExchangeCard = givenCard;
-    toast(`Tu as perdu la manche : ${players[lastRoundWinner].name} te redonne le ${cardLabel(givenCard)} (entourée en doré dans ta main).`, 4500);
+    toast(`Tu as perdu la manche : ${winner.name} te redonne le ${cardLabel(givenCard)} (entourée en doré).`, 4500);
   } else {
-    toast(`${players[lastRoundWinner].name} redonne ${cardLabel(givenCard)} à ${loser.name}. Échange visible de tous.`, 3000);
+    toast(`${winner.name} redonne ${cardLabel(givenCard)} à ${loser.name}. Échange visible de tous.`, 3000);
   }
 }
 
@@ -918,11 +950,16 @@ function checkTrickEnd(){
 function endTrick(){
   const winner = lastNonPassSeat;
   toast(`${players[winner].name} remporte le pli.`);
+  tricksPlayedThisRound++;
+  // Masquer la bulle d'échange après 3 plis
+  if(tricksPlayedThisRound>=3){
+    exchangeBubbleText = null;
+    document.getElementById('exchange-bubble').style.display='none';
+  }
   currentTrick = {combo:null, plays:[]};
   passesInRow = 0;
   lastNonPassSeat = null;
   if(players[winner].hand.length===0){
-    // déjà sorti -> le suivant actif ouvre
     let seat = winner; let attempts=0;
     do{ seat = nextSeat(seat); attempts++; } while(players[seat].hand.length===0 && attempts<5);
     turnIndex = seat;
@@ -1001,16 +1038,23 @@ function showRoundSummary(roundScores, winnerSeat, loserSeat){
     document.getElementById('btn-newgame').onclick = ()=>{
       scores=[0,0,0,0]; roundNumber=1; firstRoundEver=true; finishOrder=[];
       dealerSeat = Math.floor(Math.random()*4);
-      roundDiscardPile = [];
+      roundDiscardPile = []; exchangeBubbleText=null; tricksPlayedThisRound=0;
       document.getElementById('overlay').classList.remove('show');
       dealRound();
     };
   } else {
-    document.getElementById('btn-nextround').onclick = ()=>{
-      roundNumber++; firstRoundEver=false; finishOrder=[];
-      document.getElementById('overlay').classList.remove('show');
-      dealRound();
-    };
+    if(isMultiplayer && !isHost){
+      // Non-hôte : affiche "En attente de l'hôte..." et attend la mise à jour Supabase
+      document.getElementById('btn-nextround').textContent = '⏳ En attente de l\'hôte…';
+      document.getElementById('btn-nextround').disabled = true;
+    } else {
+      document.getElementById('btn-nextround').onclick = ()=>{
+        roundNumber++; firstRoundEver=false; finishOrder=[];
+        exchangeBubbleText=null; tricksPlayedThisRound=0;
+        document.getElementById('overlay').classList.remove('show');
+        dealRound();
+      };
+    }
   }
 }
 
@@ -1188,21 +1232,14 @@ function botPlay(seat){
     mustOpenWithRainbow1 = false;
     playCards(seat, chosen.cards);
     showBubble(seat, chosen.cards.map(cardLabel).join(' '));
-    // En multijoueur, l'hôte envoie les moves des bots à Supabase
     if(isMultiplayer && isHost){
-      const prevMySeat = mySeat;
-      mySeat = seat; // temporairement pour sendMove
-      sendMove('play', chosen.cards);
-      mySeat = prevMySeat;
+      sendMove('play', chosen.cards, seat);
     }
   } else {
     passTurn(seat);
     showBubble(seat, 'Passe');
     if(isMultiplayer && isHost){
-      const prevMySeat = mySeat;
-      mySeat = seat;
-      sendMove('pass', []);
-      mySeat = prevMySeat;
+      sendMove('pass', [], seat);
     }
   }
   renderAll();
@@ -1364,6 +1401,14 @@ function suitColor(suit){
 }
 
 function renderTrick(){
+  // Bulle d'échange persistante (3 premiers plis)
+  const bubble = document.getElementById('exchange-bubble');
+  if(exchangeBubbleText && tricksPlayedThisRound<3){
+    bubble.textContent = exchangeBubbleText;
+    bubble.style.display = '';
+  } else {
+    bubble.style.display = 'none';
+  }
   const zone = document.getElementById('trick-zone');
   zone.innerHTML='';
   const lastPlay = [...currentTrick.plays].reverse().find(p=>!p.pass);
@@ -1374,7 +1419,7 @@ function renderTrick(){
       el.innerHTML = `<div class="rank">${cardLabel(c)}</div>`;
       zone.appendChild(el);
     });
-    document.getElementById('trick-label').textContent = `${players[lastPlay.seat].name} a joué`;
+    document.getElementById('trick-label').textContent = `${players[lastPlay.seat]?.name||''} a joué`;
   } else {
     document.getElementById('trick-label').textContent = "Nouveau pli — à toi d'ouvrir";
   }
@@ -1928,7 +1973,18 @@ function subscribeRoom(roomId){
     })
     .on('postgres_changes',{event:'UPDATE', schema:'public', table:'rooms', filter:`id=eq.${roomId}`}, payload=>{
       const d = payload.new;
-      if(d.status==='playing') startMultiplayerGame(d);
+      if(d.status==='playing'){
+        if(!isMultiplayer || !isHost){
+          // Nouveau démarrage ou nouvelle manche pour le non-hôte
+          document.getElementById('overlay').classList.remove('show');
+          roundNumber = d.current_round || 1;
+          firstRoundEver = roundNumber===1;
+          finishOrder = [];
+          exchangeBubbleText = null;
+          tricksPlayedThisRound = 0;
+          startMultiplayerGame(d);
+        }
+      }
     })
     .subscribe();
 }
@@ -2051,19 +2107,29 @@ async function startMultiplayerGame(roomData){
   if(players[turnIndex]?.isBot) setTimeout(()=>botPlay(turnIndex),1200);
 }
 
+let movesChannel = null;
 function subscribeGameMoves(roomId){
-  sb.channel('moves-'+roomId)
+  if(movesChannel) sb.removeChannel(movesChannel);
+  movesChannel = sb.channel('moves-'+roomId+'-'+Date.now())
     .on('postgres_changes',{event:'INSERT', schema:'public', table:'moves', filter:`room_id=eq.${roomId}`}, payload=>{
       applyRemoteMove(payload.new);
     })
     .subscribe();
 }
 
-async function sendMove(type, cards){
+async function sendMove(type, cards, seatOverride){
+  const seatToUse = seatOverride !== undefined ? seatOverride : mySeat;
+  // On inclut le turnIndex APRES ce coup pour que les clients puissent se resynchroniser
+  let nextTurn = turnIndex;
+  // Calcul simple du prochain tour (après advanceTurn)
+  let next = seatToUse;
+  let attempts = 0;
+  do { next = nextSeat(next); attempts++; } while(players[next] && players[next].hand.length===0 && attempts<5);
+  nextTurn = next;
   await sb.from('moves').insert({
     room_id: currentRoomId,
     round_number: roundNumber,
-    seat: mySeat,
+    seat: seatToUse,
     action: type,
     cards: cards.map(c=>({id:c.id, type:c.type, rank:c.rank, suit:c.suit, power:c.power, name:c.name, label:c.label}))
   });
@@ -2074,10 +2140,9 @@ function applyRemoteMove(move){
   if(move.action==='play'){
     const movecards = move.cards||[];
     const cards = movecards.map(mc=>{
-      const found = players[move.seat].hand.find(c=>c.id===mc.id);
+      const found = players[move.seat] && players[move.seat].hand.find(c=>c.id===mc.id);
       return found || mc;
     }).filter(Boolean);
-    // Réinitialiser mustOpenWithRainbow1 si le joueur distant a joué le 1 multicolore
     if(mustOpenWithRainbow1 && cards.some(c=>c.type==='rainbow1')){
       mustOpenWithRainbow1 = false;
     }
@@ -2085,10 +2150,31 @@ function applyRemoteMove(move){
   } else {
     passTurn(move.seat);
   }
-  renderAll();
   stopTurnTimer();
-  if(optTimeout) startTurnTimer();
-  proceedAfterMove();
+  // Avancer le tour localement pour affichage
+  if(checkRoundEnd()){
+    finishRound();
+    return;
+  }
+  if(checkTrickEnd()){
+    setTimeout(()=>{ endTrick(); renderAll(); maybeBotTurn(); }, 700);
+    return;
+  }
+  advanceTurn();
+  renderAll();
+  // En multijoueur non-hôte : on ne déclenche pas les bots, on attend le prochain move de l'hôte
+  if(!isMultiplayer || isHost){
+    maybeBotTurn();
+  } else {
+    // Afficher qui joue ensuite
+    const cur = players[turnIndex];
+    if(cur && cur.isHuman){
+      document.getElementById('player-turn-label').textContent = 'À toi de jouer';
+      if(optTimeout) startTurnTimer();
+    } else {
+      document.getElementById('player-turn-label').textContent = `Tour de ${cur?.name||''}…`;
+    }
+  }
 }
 
 /* ---- Minuteur de tour ---- */
