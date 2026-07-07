@@ -621,9 +621,18 @@ function canBeat(combo, currentCombo){
 }
 
 /* ---------- Initialisation d'une manche ---------- */
+function buildPlayersForRound(){
+  // En multijoueur : préserver isHuman, isBot et les noms depuis la manche précédente
+  if(isMultiplayer && players.length===4){
+    players.forEach(p=>{ p.hand=[]; });
+  } else {
+    players = currentPlayerNames().map((name,i)=>({name, hand:[], isHuman:i===0, isBot:false, seat:i}));
+  }
+}
+
 function dealRound(){
   // ---- Réinitialisation des variables de manche ----
-  players = currentPlayerNames().map((name,i)=>({name, hand:[], isHuman:i===0, seat:i}));
+  buildPlayersForRound();
   currentTrick = {combo:null, plays:[]};
   passesInRow = 0;
   lastNonPassSeat = null;
@@ -678,11 +687,15 @@ function dealRound(){
 }
 
 function afterCut(cutDeck){
-  // Distribution par le gagnant, en commençant par le premier joueur dans le sens de la manche suivante
   const winnerSeat = lastRoundWinner;
   const firstReceiver = direction===1 ? (winnerSeat + 3) % 4 : (winnerSeat + 1) % 4;
 
-  players = currentPlayerNames().map((name,i)=>({name, hand:[], isHuman:i===0, seat:i}));
+  // En multijoueur : préserver isHuman/isBot, juste réaffecter les mains
+  if(isMultiplayer && players.length===4){
+    players.forEach(p=>{ p.hand=[]; });
+  } else {
+    players = currentPlayerNames().map((name,i)=>({name, hand:[], isHuman:i===0, isBot:false, seat:i}));
+  }
   for(let i=0; i<cutDeck.length; i++){
     const seat = (firstReceiver + i) % 4;
     players[seat].hand.push(cutDeck[i]);
