@@ -436,6 +436,7 @@
 </div>
 
 <div id="toast"></div>
+<div id="debug-log" style="position:fixed; bottom:70px; left:4px; right:4px; max-height:120px; overflow-y:auto; background:rgba(0,0,0,0.85); color:#0f0; font-size:10px; font-family:monospace; padding:4px; border-radius:6px; z-index:99; display:none;"></div>
 
 <div id="overlay">
   <div class="panel" id="panel-content"></div>
@@ -1271,6 +1272,7 @@ function maybeBotTurn(){
   const canPlayBot = !isMultiplayer || isHost;
   const shouldBotPlay = currentPlayer.isBot && canPlayBot;
   const shouldBotPlaySolo = !isMultiplayer && !currentPlayer.isHuman;
+  dbg(`TURN S${turnIndex}(${currentPlayer.name}) H=${currentPlayer.isHuman} B=${currentPlayer.isBot} host=${isHost} bot?=${shouldBotPlay||shouldBotPlaySolo}`);
   if(shouldBotPlay || shouldBotPlaySolo){
     setTimeout(()=>botPlay(turnIndex), 800);
   } else if(currentPlayer.isHuman){
@@ -1743,6 +1745,37 @@ document.getElementById('btn-history').addEventListener('click', ()=>{
 /* =========================================================
    SUPABASE — MULTIJOUEUR
    ========================================================= */
+// ---- Debug log ----
+let debugEnabled = false;
+function dbg(msg){
+  if(!debugEnabled) return;
+  const el = document.getElementById('debug-log');
+  if(!el) return;
+  el.style.display='block';
+  const line = document.createElement('div');
+  line.textContent = new Date().toLocaleTimeString('fr',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+  // Garder seulement les 60 dernières lignes
+  while(el.children.length>60) el.removeChild(el.firstChild);
+}
+// Activer le debug : triple-tap sur le titre "Gang of Four"
+document.querySelector('#topbar .title')?.addEventListener('click', (()=>{
+  let taps=0, t;
+  return ()=>{
+    taps++;
+    clearTimeout(t);
+    t = setTimeout(()=>taps=0, 600);
+    if(taps>=3){
+      debugEnabled=!debugEnabled;
+      const el=document.getElementById('debug-log');
+      if(el) el.style.display=debugEnabled?'block':'none';
+      toast(debugEnabled?'Debug ON':'Debug OFF');
+      taps=0;
+    }
+  };
+})());
+
 const SUPABASE_URL = 'https://pqlcnxzgyfujigjtzkvu.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_faYk9e2SRQot-a-pTQN7Mg_eZIxTa4z';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -2088,6 +2121,8 @@ async function startMultiplayerGame(roomData){
     seat: s
   }));
   console.log('Mon siège:', mySeat, 'isHuman:', players[mySeat]?.isHuman, 'localPlayerId:', localPlayerId, 'slot local_id:', seatMap[mySeat]?.local_id);
+  dbg(`=== DEBUT MANCHE ${roundNumber} ===`);
+  players.forEach((p,i)=>dbg(`  S${i}: ${p.name} isHuman=${p.isHuman} isBot=${p.isBot} hand=${p.hand.length}`));
   scores = typeof gs.scores==='string' ? JSON.parse(gs.scores) : gs.scores;
   roundNumber = gs.roundNumber||1;
   direction = gs.direction||1;
