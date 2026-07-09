@@ -370,10 +370,7 @@
     </div>
     <div id="room-options" style="display:none; margin:10px 0; font-size:12px; color:var(--paper);">
       <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-        <input type="checkbox" id="opt-bots" checked> Remplacer absents par des bots
-      </label>
-      <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-        <input type="checkbox" id="opt-timeout" checked> Timeout 60s par tour
+        <input type="checkbox" id="opt-timeout" checked> ⏱ Timeout 60s par tour
       </label>
     </div>
     <div style="display:flex; gap:8px;">
@@ -1246,15 +1243,9 @@ function botPlay(seat){
     mustOpenWithRainbow1 = false;
     playCards(seat, chosen.cards);
     showBubble(seat, chosen.cards.map(cardLabel).join(' '));
-    if(isMultiplayer && isHost){
-      sendMove('play', chosen.cards, seat);
-    }
   } else {
     passTurn(seat);
     showBubble(seat, 'Passe');
-    if(isMultiplayer && isHost){
-      sendMove('pass', [], seat);
-    }
   }
   renderAll();
   proceedAfterMove();
@@ -1276,22 +1267,17 @@ function proceedAfterMove(){
 
 function maybeBotTurn(){
   if(gameOver) return;
-  if(players[turnIndex] && players[turnIndex].hand.length===0){
-    advanceTurn();
-  }
+  if(players[turnIndex] && players[turnIndex].hand.length===0) advanceTurn();
   const currentPlayer = players[turnIndex];
   if(!currentPlayer) return;
-  // En multijoueur : seul l'hôte joue les bots
-  const canPlayBot = !isMultiplayer || isHost;
-  const shouldBotPlay = currentPlayer.isBot && canPlayBot;
-  const shouldBotPlaySolo = !isMultiplayer && !currentPlayer.isHuman;
-  dbg(`TURN S${turnIndex}(${currentPlayer.name}) H=${currentPlayer.isHuman} B=${currentPlayer.isBot} host=${isHost} bot?=${shouldBotPlay||shouldBotPlaySolo}`);
-  if(shouldBotPlay || shouldBotPlaySolo){
+  // En multijoueur : aucun bot — tous les joueurs sont humains
+  const isBotTurn = !isMultiplayer && !currentPlayer.isHuman;
+  dbg(`TURN S${turnIndex}(${currentPlayer.name}) H=${currentPlayer.isHuman} multi=${isMultiplayer} bot?=${isBotTurn}`);
+  if(isBotTurn){
     setTimeout(()=>botPlay(turnIndex), 800);
   } else if(currentPlayer.isHuman){
     document.getElementById('player-turn-label').textContent = 'À toi de jouer';
   } else {
-    // Joueur humain distant ou bot géré par l'hôte — on attend
     document.getElementById('player-turn-label').textContent = `Tour de ${currentPlayer.name}…`;
   }
 }
@@ -2001,12 +1987,12 @@ function updateRoomVisual(slots){
   }
   const filled = Object.keys(seatMap).length;
   const launchBtn = document.getElementById('btn-launch-game');
-  if(isHost && filled>=2){
+  if(isHost && filled===4){
     launchBtn.style.display = '';
-    document.getElementById('room-status-msg').textContent = filled===4 ? 'Table complète — tu peux lancer !' : `${filled}/4 joueurs — tu peux lancer ou remplir avec des bots`;
+    document.getElementById('room-status-msg').textContent = 'Table complète — tu peux lancer !';
   } else {
     launchBtn.style.display = 'none';
-    document.getElementById('room-status-msg').textContent = `${filled}/4 joueurs — En attente…`;
+    document.getElementById('room-status-msg').textContent = `${filled}/4 joueurs — En attente de joueurs humains…`;
   }
 }
 
@@ -2049,22 +2035,13 @@ async function fillWithBots(roomId){
 
 // Lancer la partie (hôte)
 document.getElementById('btn-launch-game').addEventListener('click', async ()=>{
-  optBots = document.getElementById('opt-bots').checked;
   optTimeout = document.getElementById('opt-timeout').checked;
-  if(optBots) await fillWithBots(currentRoomId);
-  // Récupérer les slots pour construire les mains
+  optBots = false; // pas de bots en partie privée
   const {data:slots} = await sb.from('room_slots').select().eq('room_id',currentRoomId).not('local_id','is',null);
-  if(!slots||slots.length<2){ alert('Pas assez de joueurs.'); return; }
-  // S'assurer que 4 sièges sont remplis
-  const takenSeats = slots.map(s=>s.seat);
-  if(takenSeats.length<4){
-    alert('Remplis les sièges vides avec des bots d\'abord.');
-    return;
-  }
+  if(!slots||slots.length<4){ alert('Il faut 4 joueurs humains pour lancer.'); return; }
   const initDeck = shuffle(makeDeck());
   const hands = {0:[],1:[],2:[],3:[]};
   initDeck.forEach((c,i)=> hands[i%4].push(c));
-  // Trouver le détenteur du 1 multicolore
   let starterSeat = 0;
   for(let s=0;s<4;s++){
     if(hands[s].some(c=>c.type==='rainbow1')){ starterSeat=s; break; }
@@ -2080,13 +2057,13 @@ document.getElementById('btn-launch-game').addEventListener('click', async ()=>{
     lastNonPassSeat: null,
     finishOrder: JSON.stringify([]),
     mustOpenWithRainbow1: true,
-    opt_bots: optBots,
+    opt_bots: false,
     opt_timeout: optTimeout
   };
   await sb.from('rooms').update({
     status:'playing',
     game_state: gameState,
-    allow_bots: optBots,
+    allow_bots: false,
     turn_timeout: optTimeout ? 60 : 0
   }).eq('id', currentRoomId);
 });
@@ -2151,8 +2128,14 @@ async function startMultiplayerGame(roomData){
   renderAll();
   updateDirectionIndicator();
   toast(`Partie lancée ! Tu joues au siège ${['Sud','Ouest','Nord','Est'][mySeat]}.`, 3000);
-  if(optTimeout && turnIndex!==undefined) startTurnTimer();
-  if(players[turnIndex]?.isBot) setTimeout(()=>botPlay(turnIndex),1200);
+  if(optTimeout) startTurnTimer();
+  // En multijoueur sans bots : on affiche juste qui commence
+  const starter = players[turnIndex];
+  if(starter?.isHuman){
+    document.getElementById('player-turn-label').textContent = 'À toi de jouer';
+  } else {
+    document.getElementById('player-turn-label').textContent = `Tour de ${starter?.name||''}…`;
+  }
 }
 
 let movesChannel = null;
@@ -2184,7 +2167,8 @@ async function sendMove(type, cards, seatOverride){
 }
 
 function applyRemoteMove(move){
-  if(move.seat === mySeat) return;
+  if(move.seat === mySeat) return; // ignorer ses propres moves
+  dbg(`REMOTE S${move.seat} ${move.action}`);
   if(move.action==='play'){
     const movecards = move.cards||[];
     const cards = movecards.map(mc=>{
@@ -2242,14 +2226,13 @@ function startTurnTimer(){
       timerEl.classList.remove('show');
       const currentPlayer = players[turnIndex];
       if(!currentPlayer) return;
-      // Timeout : passer automatiquement SEULEMENT pour les bots
-      // Jamais pour un joueur humain réel (local ou distant)
-      if(currentPlayer.isBot){
+      if(!isMultiplayer && !currentPlayer.isHuman){
+        // Solo uniquement : passer automatiquement pour les bots
         passTurn(turnIndex);
         renderAll();
         proceedAfterMove();
       }
-      // Pour un humain distant, on attend sans forcer — pas de passage automatique
+      // En multijoueur : on ne force jamais, on attend le joueur
     }
   },1000);
 }
