@@ -387,6 +387,7 @@
   <div class="title"><span class="seal">幫</span> Gang of Four</div>
   <div style="display:flex; align-items:center; gap:8px;">
     <div class="score-pill" id="round-indicator">Manche 1</div>
+    <div class="score-pill" id="room-code-pill" style="display:none; cursor:pointer; letter-spacing:2px; color:var(--gold-bright);" title="Code de la partie — clique pour copier"></div>
     <button class="score-pill" id="btn-settings" style="cursor:pointer;">⚙️</button>
     <button class="score-pill" id="btn-history" style="cursor:pointer;">📜</button>
     <button class="score-pill" id="btn-info" style="cursor:pointer;">❓</button>
@@ -509,6 +510,13 @@ function cardLabel(c){
   if(c.type==='phoenix') return c.label;
   if(c.type==='rainbow1') return '1✦';
   return String(c.rank);
+}
+function cardLabelFull(c){
+  const suitEmoji = {red:'🔴', yellow:'🟡', green:'🟢'};
+  if(c.type==='dragon') return '🐉 Dragon';
+  if(c.type==='phoenix') return c.label;
+  if(c.type==='rainbow1') return '1✦ (multicolore)';
+  return `${c.rank}${suitEmoji[c.suit]||''}`;
 }
 function cardColorClass(c){
   if(c.type==='dragon') return 'special dragon';
@@ -839,8 +847,9 @@ let lastRoundLoser=null, lastRoundWinner=null;
 // Etape 1 (toujours automatique) : le perdant donne sa meilleure carte au gagnant.
 // Etape 2 : le gagnant choisit librement la carte qu'il redonne au perdant (lui-même s'il est humain, sinon l'IA choisit).
 let highlightedExchangeCard = null;
-let exchangeBubbleText = null; // texte de la bulle d'échange
-let tricksPlayedThisRound = 0; // compteur de plis joués dans la manche en cours
+let exchangeBubbleText = null;
+let lastLoserBestCard = null; // carte haute donnée par le perdant
+let tricksPlayedThisRound = 0;
 
 function doCardExchangeStep1(){
   if(lastRoundWinner===null||lastRoundLoser===null) return null;
@@ -849,14 +858,15 @@ function doCardExchangeStep1(){
   if(loser===winner) return null;
   loser.hand = sortHand(loser.hand);
   const bestCard = loser.hand.pop();
+  lastLoserBestCard = bestCard; // mémoriser pour la bulle
   winner.hand.push(bestCard);
   winner.hand = sortHand(winner.hand);
   currentLeader = lastRoundWinner;
   if(lastRoundWinner===0){
     highlightedExchangeCard = bestCard;
-    toast(`Tu as remporté la manche : ${loser.name} te donne le ${cardLabel(bestCard)} (entourée en doré).`, 4500);
+    toast(`Tu as remporté la manche : ${loser.name} te donne le ${cardLabelFull(bestCard)} (entourée en doré).`, 4500);
   } else {
-    toast(`${loser.name} donne sa meilleure carte (${cardLabel(bestCard)}) à ${winner.name}.`, 3000);
+    toast(`${loser.name} donne sa meilleure carte (${cardLabelFull(bestCard)}) à ${winner.name}.`, 3000);
   }
   return bestCard;
 }
@@ -865,13 +875,14 @@ function doCardExchangeStep2(givenCard){
   loser.hand.push(givenCard);
   players.forEach(p=>p.hand=sortHand(p.hand));
   const winner = players[lastRoundWinner];
-  exchangeBubbleText = `🔄 ${loser.name} → ${winner.name} : meilleure carte | ${winner.name} → ${loser.name} : ${cardLabel(givenCard)}`;
+  // Bulle visible pendant le 1er pli uniquement, avec cartes détaillées
+  exchangeBubbleText = `🔄 ${loser.name} donne ${cardLabelFull(lastLoserBestCard||givenCard)} à ${winner.name} · ${winner.name} rend ${cardLabelFull(givenCard)} à ${loser.name}`;
   tricksPlayedThisRound = 0;
   if(lastRoundLoser===0){
     highlightedExchangeCard = givenCard;
-    toast(`Tu as perdu la manche : ${winner.name} te redonne le ${cardLabel(givenCard)} (entourée en doré).`, 4500);
+    toast(`Tu as perdu la manche : ${winner.name} te redonne le ${cardLabelFull(givenCard)} (entourée en doré).`, 4500);
   } else {
-    toast(`${winner.name} redonne ${cardLabel(givenCard)} à ${loser.name}. Échange visible de tous.`, 3000);
+    toast(`${winner.name} redonne ${cardLabelFull(givenCard)} à ${loser.name}. Échange visible de tous.`, 3000);
   }
 }
 
@@ -963,7 +974,7 @@ function endTrick(){
   toast(`${players[winner].name} remporte le pli.`);
   tricksPlayedThisRound++;
   // Masquer la bulle d'échange après 3 plis
-  if(tricksPlayedThisRound>=3){
+  if(tricksPlayedThisRound>=1){
     exchangeBubbleText = null;
     document.getElementById('exchange-bubble').style.display='none';
   }
@@ -1410,7 +1421,7 @@ function suitColor(suit){
 function renderTrick(){
   // Bulle d'échange persistante (3 premiers plis)
   const bubble = document.getElementById('exchange-bubble');
-  if(exchangeBubbleText && tricksPlayedThisRound<3){
+  if(exchangeBubbleText && tricksPlayedThisRound<1){
     bubble.textContent = exchangeBubbleText;
     bubble.style.display = '';
   } else {
@@ -1582,6 +1593,15 @@ function saveHistoryEntry(entry){
   if(hist.length>50) hist.length = 50;
   localStorage.setItem('g4_history', JSON.stringify(hist));
 }
+
+document.getElementById('room-code-pill').addEventListener('click', ()=>{
+  if(!currentRoomCode) return;
+  navigator.clipboard?.writeText(currentRoomCode).then(()=>{
+    toast(`Code "${currentRoomCode}" copié !`);
+  }).catch(()=>{
+    toast(`Code de la partie : ${currentRoomCode}`);
+  });
+});
 
 document.getElementById('btn-quit-game').addEventListener('click', ()=>{
   const panel = document.getElementById('panel-content');
@@ -1819,6 +1839,7 @@ function generateCode(){
 function showLobby(){
   document.getElementById('lobby-screen').classList.add('show');
   document.getElementById('btn-quit-game').style.display = 'none';
+  document.getElementById('room-code-pill').style.display = 'none';
   const saved = localStorage.getItem('g4_pseudo') || '';
   document.getElementById('pseudo-lobby').value = saved;
   document.getElementById('pseudo-multi').value = saved;
@@ -1826,6 +1847,12 @@ function showLobby(){
 function hideLobby(){
   document.getElementById('lobby-screen').classList.remove('show');
   document.getElementById('btn-quit-game').style.display = '';
+  // Afficher le code si on est en partie multi
+  if(isMultiplayer && currentRoomCode){
+    const pill = document.getElementById('room-code-pill');
+    pill.textContent = '🔑 ' + currentRoomCode;
+    pill.style.display = '';
+  }
 }
 
 // Tabs
