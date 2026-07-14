@@ -579,21 +579,23 @@ function evaluateCombo(cards){
       const countVals = Object.values(counts).sort((a,b)=>b-a);
       const isFullHouse = countVals[0]===3 && countVals[1]===2;
 
+      // Encodage multi-cartes pour départager à cartes égales (base 200 par position)
+      const encode5 = (arr) => arr.reduce((acc, c, i) => acc + c.power * Math.pow(200, i), 0);
+
       if(isStraight && isFlush){
-        return {type:'straightflush', count:5, power: 300 + sorted[4].power, highCard: sorted[4]};
+        return {type:'straightflush', count:5, power: 3e12 + encode5(sorted), highCard: sorted[4]};
       }
       if(isFullHouse){
-        // power basé sur le rang du triple
         const tripleRank = Object.keys(counts).find(k=>counts[k]===3);
         const tripleCards = sorted.filter(c=>(c.type==='rainbow1'?1:c.rank)==tripleRank);
         const highest = tripleCards.sort((a,b)=>a.power-b.power)[tripleCards.length-1];
-        return {type:'fullhouse', count:5, power: 200 + highest.power, highCard: highest};
+        return {type:'fullhouse', count:5, power: 2e12 + encode5(sorted), highCard: highest};
       }
       if(isFlush){
-        return {type:'flush', count:5, power: 100 + sorted[4].power, highCard: sorted[4]};
+        return {type:'flush', count:5, power: 1e12 + encode5(sorted), highCard: sorted[4]};
       }
       if(isStraight){
-        return {type:'straight', count:5, power: sorted[4].power, highCard: sorted[4]};
+        return {type:'straight', count:5, power: encode5(sorted), highCard: sorted[4]};
       }
     }
     return null;
