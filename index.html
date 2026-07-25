@@ -587,9 +587,12 @@ function evaluateCombo(cards){
       }
       if(isFullHouse){
         const tripleRank = Object.keys(counts).find(k=>counts[k]===3);
-        const tripleCards = sorted.filter(c=>(c.type==='rainbow1'?1:c.rank)==tripleRank);
-        const highest = tripleCards.sort((a,b)=>a.power-b.power)[tripleCards.length-1];
-        return {type:'fullhouse', count:5, power: 2e12 + encode5(sorted), highCard: highest};
+        const pairRank = Object.keys(counts).find(k=>counts[k]===2);
+        const tripleTop = sorted.filter(c=>(c.type==='rainbow1'?1:c.rank)==tripleRank).sort((a,b)=>a.power-b.power).pop();
+        const pairTop = sorted.filter(c=>(c.type==='rainbow1'?1:c.rank)==pairRank).sort((a,b)=>a.power-b.power).pop();
+        // Brelan prime, paire en départage
+        const fhPower = (tripleTop?.power||0) * 10000 + (pairTop?.power||0);
+        return {type:'fullhouse', count:5, power: 2e12 + fhPower, highCard: tripleTop||sorted[4]};
       }
       if(isFlush){
         return {type:'flush', count:5, power: 1e12 + encode5(sorted), highCard: sorted[4]};
