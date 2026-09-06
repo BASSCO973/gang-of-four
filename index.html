@@ -933,14 +933,13 @@ function applyDefensiveRule(moves, hand, currentCombo){
   const sorted = sortHand(hand);
   const highestCard = sorted[sorted.length-1];
   if(currentCombo===null){
-    // joueur qui ouvre : doit jouer une combinaison de >1 carte, ou sa plus haute carte seule
-    return moves.filter(m=> m.cards.length>1 || (m.cards.length===1 && m.cards[0]===highestCard));
+    // ouverture : gang toujours autorisé, sinon doit jouer sa plus haute carte seule ou une combo multi
+    return moves.filter(m=> m.combo.type==='gang' || m.cards.length>1 || (m.cards.length===1 && m.cards[0]===highestCard));
   }
   if(currentCombo.type==='single'){
-    // doit jouer sa plus haute carte si elle bat le pli
-    return moves.filter(m=> m.cards.length===1 && m.cards[0]===highestCard);
+    // gang toujours autorisé ; sinon doit jouer sa plus haute carte seule
+    return moves.filter(m=> m.combo.type==='gang' || (m.cards.length===1 && m.cards[0]===highestCard));
   }
-  // sinon : doit simplement jouer si possible, n'importe quel coup valide convient
   return moves;
 }
 
@@ -1351,15 +1350,19 @@ document.getElementById('btn-play').addEventListener('click', ()=>{
   if(isDefensiveSituation(hs)){
     const sorted = sortHand(players[hs].hand);
     const highestCard = sorted[sorted.length-1];
-    if(currentTrick.combo===null){
-      if(selectedCards.length===1 && selectedCards[0]!==highestCard){
-        toast(`Le joueur suivant n'a plus qu'une carte : si tu ouvres avec une seule carte, ce doit être ta plus haute (${cardLabel(highestCard)}).`);
-        return;
-      }
-    } else if(currentTrick.combo.type==='single'){
-      if(!(selectedCards.length===1 && selectedCards[0]===highestCard)){
-        toast(`Le joueur suivant n'a plus qu'une carte : tu dois jouer ta plus haute carte (${cardLabel(highestCard)}).`);
-        return;
+    // Un gang ou toute combinaison de plusieurs cartes est toujours autorisé
+    // La restriction ne s'applique qu'aux cartes seules
+    if(combo.type !== 'gang' && selectedCards.length === 1){
+      if(currentTrick.combo===null){
+        if(selectedCards[0]!==highestCard){
+          toast(`Le joueur suivant n'a plus qu'une carte : si tu joues une seule carte, ce doit être ta plus haute (${cardLabel(highestCard)}).`);
+          return;
+        }
+      } else if(currentTrick.combo.type==='single'){
+        if(selectedCards[0]!==highestCard){
+          toast(`Le joueur suivant n'a plus qu'une carte : tu dois jouer ta plus haute carte (${cardLabel(highestCard)}).`);
+          return;
+        }
       }
     }
   }
